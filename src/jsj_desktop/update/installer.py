@@ -454,7 +454,7 @@ def _apply_windows_install(plan, relaunch, runner, pid):
     try:
         with startup_log.open("wb") as output:
             worker = _windows_popen(cmd, runner, cwd=str(handoff),
-                                    creationflags=0x00000008 | 0x00000200,
+                                    creationflags=0x08000000 | 0x00000200,
                                     stdin=subprocess.DEVNULL, stdout=output,
                                     stderr=subprocess.STDOUT, close_fds=True,
                                     env_overrides=env_overrides)
@@ -475,9 +475,10 @@ def _apply_windows_install(plan, relaunch, runner, pid):
                     if install_details:
                         details = "\n".join(
                             part for part in (details, install_details) if part)
-                    raise RuntimeError("PowerShell 进程已退出。%s" %
-                                       ((" 日志：" + details[-2000:])
-                                        if details else ""))
+                    message = (" 日志：" + details[-2000:]) if details else ""
+                    raise RuntimeError(
+                        "PowerShell 进程已退出（代码 %s）。%s" %
+                        (worker.returncode, message))
                 if time.monotonic() >= deadline:
                     worker.kill()
                     worker.wait()
