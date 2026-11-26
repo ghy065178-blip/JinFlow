@@ -171,28 +171,28 @@ def apply(root, mode="system", system_mode=None):
                     bordercolor=p["border"], insertcolor=p["text"],
                     troughcolor=p["surface2"], focuscolor=p["teal"])
     style.configure("TFrame", background=p["bg"])
-    style.configure("Card.TFrame", background=p["surface"], relief="solid",
+    style.configure("Card.TFrame", background=p["glass"], relief="solid",
                     borderwidth=1, bordercolor=p["border"],
                     lightcolor=p["glass_highlight"], darkcolor=p["shadow"])
     style.configure("CardHead.TFrame", background=p["surface2"],
                     lightcolor=p["glass_highlight"], darkcolor=p["shadow"])
-    style.configure("Pill.TFrame", background=p["surface"], relief="solid",
+    style.configure("Pill.TFrame", background=p["glass"], relief="solid",
                     borderwidth=1, bordercolor=p["border"],
                     lightcolor=p["glass_highlight"], darkcolor=p["shadow"])
 
     style.configure("TLabel", background=p["bg"], foreground=p["text"],
                     font=(family, 10))
-    style.configure("Card.TLabel", background=p["surface"],
+    style.configure("Card.TLabel", background=p["glass"],
                     foreground=p["text"])
     style.configure("Muted.TLabel", background=p["bg"], foreground=p["muted"],
                     font=(family, 9))
-    style.configure("CardMuted.TLabel", background=p["surface"],
+    style.configure("CardMuted.TLabel", background=p["glass"],
                     foreground=p["muted"], font=(family, 9))
     style.configure("Key.TLabel", background=p["bg"], foreground=p["dim"],
                     font=(family, 9))
     style.configure("CardKey.TLabel", background=p["bg"], foreground=p["dim"],
                     font=(family, 9))
-    style.configure("Value.TLabel", background=p["surface"],
+    style.configure("Value.TLabel", background=p["glass"],
                     foreground=p["text"], font=(family, 16, "bold"))
     style.configure("Title.TLabel", background=p["bg"], foreground=p["text"],
                     font=(family, 14, "bold"))
@@ -200,9 +200,9 @@ def apply(root, mode="system", system_mode=None):
                     foreground=p["text"], font=(family, 11, "bold"))
     style.configure("Hint.TLabel", background=p["bg"], foreground=p["dim"],
                     font=(family, 9))
-    style.configure("CardHint.TLabel", background=p["surface"],
+    style.configure("CardHint.TLabel", background=p["glass"],
                     foreground=p["dim"], font=(family, 9))
-    style.configure("Warn.TLabel", background=p["surface"],
+    style.configure("Warn.TLabel", background=p["glass"],
                     foreground="#e3c07b", font=(family, 9))
     style.configure("Notice.TLabel", background=p["notice"],
                     foreground="#a9bccd", font=(family, 9))
@@ -213,9 +213,9 @@ def apply(root, mode="system", system_mode=None):
     style.configure("Head.TLabel", background=p["surface2"],
                     foreground=p["muted"], font=(family, 10, "bold"))
 
-    style.configure("TLabelframe", background=p["surface"],
+    style.configure("TLabelframe", background=p["glass"],
                     bordercolor=p["border"], relief="solid", borderwidth=1)
-    style.configure("TLabelframe.Label", background=p["surface"],
+    style.configure("TLabelframe.Label", background=p["glass"],
                     foreground=p["teal"], font=(family, 10, "bold"))
 
     style.configure("TButton", background=p["surface2"], foreground=p["text"],
@@ -251,11 +251,11 @@ def apply(root, mode="system", system_mode=None):
     style.configure("TCheckbutton", background=p["bg"], foreground=p["text"],
                     font=(family, 10), indicatorcolor=p["bg"],
                     indicatorbackground=p["surface2"])
-    style.configure("Card.TCheckbutton", background=p["surface"],
+    style.configure("Card.TCheckbutton", background=p["glass"],
                     foreground=p["text"], font=(family, 10))
     style.configure("Head.TCheckbutton", background=p["surface2"],
                     foreground=p["text"], font=(family, 10))
-    style.configure("Theme.TRadiobutton", background=p["surface"],
+    style.configure("Theme.TRadiobutton", background=p["glass"],
                     foreground=p["text"], font=(family, 10),
                     indicatorcolor=p["surface2"],
                     indicatorbackground=p["surface2"])

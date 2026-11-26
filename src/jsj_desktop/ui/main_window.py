@@ -154,27 +154,27 @@ class MainWindow(Tk):
         spacer = ttk.Frame(top)
         spacer.pack(side=LEFT, fill=X, expand=True)
 
-        conn = tk.Frame(top, bg=PALETTE["surface"], highlightbackground=PALETTE["border"],
+        conn = tk.Frame(top, bg=PALETTE["glass"], highlightbackground=PALETTE["border"],
                         highlightthickness=1, padx=12, pady=5)
         conn.pack(side=LEFT, padx=(0, 8))
-        tk.Label(conn, text="●", bg=PALETTE["surface"], fg=PALETTE["green"],
+        tk.Label(conn, text="●", bg=PALETTE["glass"], fg=PALETTE["green"],
                  font=(font_family(), 9)).pack(side=LEFT, padx=(0, 6))
         self.conn_text = tk.Label(conn, text="实时监控已连接",
-                                   bg=PALETTE["surface"], fg=PALETTE["muted"],
+                                   bg=PALETTE["glass"], fg=PALETTE["muted"],
                                    font=(font_family(), 9))
         self.conn_text.pack(side=LEFT)
 
-        clock = tk.Frame(top, bg=PALETTE["surface"], highlightbackground=PALETTE["border"],
+        clock = tk.Frame(top, bg=PALETTE["glass"], highlightbackground=PALETTE["border"],
                          highlightthickness=1, padx=12, pady=5)
         clock.pack(side=LEFT)
         self.clock_var = StringVar(value="--:--:--")
-        tk.Label(clock, text="北京时间 ", bg=PALETTE["surface"],
+        tk.Label(clock, text="北京时间 ", bg=PALETTE["glass"],
                  fg=PALETTE["muted"], font=(font_family(), 9)).pack(side=LEFT)
-        tk.Label(clock, textvariable=self.clock_var, bg=PALETTE["surface"],
+        tk.Label(clock, textvariable=self.clock_var, bg=PALETTE["glass"],
                  fg=PALETTE["text"], font=(font_family(), 9, "bold")).pack(side=LEFT)
 
     def _build_taskbar(self):
-        bar = tk.Frame(self, bg=PALETTE["surface"],
+        bar = tk.Frame(self, bg=PALETTE["glass"],
                        highlightbackground=PALETTE["border"],
                        highlightthickness=1)
         bar.pack(fill=X, padx=20, pady=(0, 12))
@@ -448,7 +448,7 @@ class MainWindow(Tk):
                        command=lambda v=value: self._send_quick(v)) \
                 .pack(side=LEFT, padx=2)
         self.stdin_hint = tk.Label(
-            outer, bg=PALETTE["surface"], fg=PALETTE["dim"],
+            outer, bg=PALETTE["glass"], fg=PALETTE["dim"],
             font=(font_family(), 9), anchor="w", justify=LEFT,
             text="向脚本终端发送一行（回车发送）；自动应答关闭时在此手动回复。")
         self.stdin_hint.pack(fill=X, padx=12, pady=(0, 8))
@@ -458,7 +458,7 @@ class MainWindow(Tk):
         win = tk.Toplevel(self)
         win.overrideredirect(True)
         win.withdraw()
-        outer = tk.Frame(win, bg=PALETTE["surface2"],
+        outer = tk.Frame(win, bg=PALETTE["glass"],
                          highlightbackground=PALETTE["border"],
                          highlightthickness=1)
         outer.pack(fill=BOTH, expand=True)
