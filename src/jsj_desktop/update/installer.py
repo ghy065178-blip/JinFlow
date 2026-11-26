@@ -444,6 +444,7 @@ def _apply_windows_install(plan, relaunch, runner, pid):
         deadline = time.monotonic() + 15
         while not ready.is_file():
             if worker.poll() is not None:
+                output.flush()
                 try:
                     details = startup_log.read_text(encoding="utf-8-sig").strip()
                 except OSError:
