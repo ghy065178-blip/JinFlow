@@ -4,8 +4,8 @@
 
 | 发布包 | CPU 架构 | 构建 runner | 官方 Python | 产物 |
 |---|---|---|---|---|
-| `JinshujuDesktop-macos-x86_64.zip` | Intel Mac (x86_64) | `macos-15-intel` / `macos-26-intel` | CPython 3.11+（x86_64） | `JinshujuDesktop.app` |
-| `JinshujuDesktop-macos-arm64.zip` | Apple Silicon (arm64) | `macos-15` / `macos-26` / `macos-latest` | CPython 3.11+（arm64） | `JinshujuDesktop.app` |
+| `JinshujuDesktop-macos-x86_64.dmg` + `.zip` | Intel Mac (x86_64) | `macos-15-intel` / `macos-26-intel` | CPython 3.11+（x86_64） | `JinshujuDesktop.app`（DMG 推荐） |
+| `JinshujuDesktop-macos-arm64.dmg` + `.zip` | Apple Silicon (arm64) | `macos-15` / `macos-26` / `macos-latest` | CPython 3.11+（arm64） | `JinshujuDesktop.app`（DMG 推荐） |
 | `JinshujuDesktop-windows-x86_64.zip` | Windows AMD64 | `windows-2022` / `windows-2025` | CPython 3.11+（amd64） | `JinshujuDesktop.exe` + `_internal/` |
 | `JinshujuDesktop-windows-arm64.zip` | Windows ARM64 | `windows-11-arm` | CPython 3.11+（arm64，3.11 起提供） | `JinshujuDesktop.exe` + `_internal/` |
 
@@ -121,9 +121,11 @@ git push origin v1.0.0
 | PyInstaller 在 Windows ARM64 找不到 bootloader | 升级到 PyInstaller 6.10+；必要时从源码构建 bootloader |
 | macOS `.app` 体积异常大 | zip 未保留符号链接；必须使用 `ditto`/`zip -y`，不要普通 `shutil.make_archive` |
 | macOS 提示「已损坏，无法打开」 | 未签名/未公证，或下载时带了 quarantine 属性；按第 5 节签名公证 |
+| macOS 提示「应用程序 … 无法打开」，但再解压一次就正常 | 下载隔离（quarantine / App Translocation）+ iCloud 云盘同步未完成导致 bundle 内容不完整。1.0.3 起提供 DMG 并引导拖入「应用程序」；`stage_and_pack` 复制后重做 ad-hoc 签名；CI 新增「解压 zip → 启动」「挂载 DMG → 启动」用户流程验证 |
 | Windows 提示 SmartScreen | 未做代码签名；用证书签名或提示用户手动放行 |
 | 构建产物被 PII 扫描拦截 | 检查是否把本地数据目录误加进 `--add-data`；只应包含 `tests/fixtures/` 合成样例。Tcl/Tk 编码表已列入运行时数据豁免，若仍有误报见 `docs/PRIVACY.md` |
 | macOS 版能开窗口但读取表单报 `CERTIFICATE_VERIFY_FAILED` | macOS 的 Python/OpenSSL 不读系统钥匙串，冻结包必须携带 `certs/cacert.pem`（构建脚本已强制校验）。1.0.2 起由 `packaging/entry_point.py` 设置 `SSL_CERT_FILE`；用 `--check-tls` 诊断 |
+| DMG 挂载失败 / PII 扫描报「发布包既不是目录也不是有效 zip」 | `check_no_pii.scan_artifact` 对 `.dmg` 会在 macOS 上用 `hdiutil attach -readonly -nobrowse` 挂载后 `scan_tree`；只在 macOS 构建 DMG，Windows 上不生成 |
 | 私有仓库 `windows-11-arm` 无法启动 | 该托管 runner 仅对公开仓库免费；改用自托管 ARM64 runner |
 
 ## 8. 版本与变更

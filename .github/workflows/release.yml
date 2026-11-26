@@ -64,6 +64,30 @@ jobs:
           # 同时确认证书文件确实在 .app 内
           find "dist/raw/${{ matrix.target }}/JinshujuDesktop.app" -name cacert.pem -print
 
+      - name: Verify macOS distribution (user flow)
+        if: startsWith(matrix.target, 'macos')
+        run: |
+          set -e
+          # 模拟用户：下载 zip → 解压 → 从副本启动；再从 DMG 挂载后启动
+          T=$(mktemp -d)
+          ZIP="dist/JinshujuDesktop-${{ matrix.target }}.zip"
+          DMG="dist/JinshujuDesktop-${{ matrix.target }}.dmg"
+          ditto -x -k "$ZIP" "$T/from-zip"
+          ZAPP="$T/from-zip/JinshujuDesktop.app"
+          test -x "$ZAPP/Contents/MacOS/JinshujuDesktop"
+          codesign --verify --deep --strict "$ZAPP"
+          xattr -dr com.apple.quarantine "$ZAPP" || true
+          "$ZAPP/Contents/MacOS/JinshujuDesktop" --check-tls
+          MNT="$T/dmg"
+          mkdir -p "$MNT"
+          hdiutil attach -nobrowse -readonly -mountpoint "$MNT" "$DMG"
+          DAPP="$MNT/JinshujuDesktop.app"
+          test -x "$DAPP/Contents/MacOS/JinshujuDesktop"
+          codesign --verify --deep --strict "$DAPP"
+          "$DAPP/Contents/MacOS/JinshujuDesktop" --check-tls
+          hdiutil detach "$MNT"
+          echo "用户流程验证通过：zip 解压副本与 DMG 挂载副本均可启动"
+
       - name: Verify Windows executable exists
         if: startsWith(matrix.target, 'windows')
         shell: pwsh
@@ -77,6 +101,7 @@ jobs:
           name: package-${{ matrix.target }}
           path: |
             dist/*.zip
+            dist/*.dmg
             dist/SHA256SUMS.txt
           if-no-files-found: error
 
@@ -98,7 +123,7 @@ jobs:
       - name: Generate checksums
         run: |
           cd release-assets
-          sha256sum JinshujuDesktop-*.zip > SHA256SUMS.txt
+          sha256sum JinshujuDesktop-*.zip JinshujuDesktop-*.dmg > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - name: Create release
@@ -110,16 +135,21 @@ jobs:
 
             | 平台 | 包 |
             |---|---|
-            | Intel Mac (x86_64) | `JinshujuDesktop-macos-x86_64.zip` |
-            | Apple Silicon Mac (arm64) | `JinshujuDesktop-macos-arm64.zip` |
+            | Intel Mac (x86_64) | `JinshujuDesktop-macos-x86_64.dmg`（推荐）/ `.zip` |
+            | Apple Silicon Mac (arm64) | `JinshujuDesktop-macos-arm64.dmg`（推荐）/ `.zip` |
             | Windows x86_64 / AMD64 | `JinshujuDesktop-windows-x86_64.zip` |
             | Windows ARM64 | `JinshujuDesktop-windows-arm64.zip` |
 
-            校验：`SHA256SUMS.txt`。首次使用请在「任务控制台」填写本次表单链接；
+            校验：`SHA256SUMS.txt`。首次使用请在「运行配置」填写本次表单链接；
             所有报名信息与多人档案只保存在本机用户数据目录，发布包不含任何个人信息。
 
-            macOS 包若未签名/未公证，需在「系统设置 → 隐私与安全性」中手动允许；
-            Windows 包若未签名会出现 SmartScreen 提示。详见 docs/RELEASE.md。
+            **macOS 请下载 `.dmg`**：打开后把 `JinshujuDesktop.app` 拖进「应用程序」再启动。
+            不要直接在下载的 zip、解压文件夹或 iCloud 桌面 / 云盘目录里双击 `.app`，
+            否则可能因隔离属性或云同步未完成而提示「应用程序无法打开」。
+            若仍被拦截：`xattr -dr com.apple.quarantine /Applications/JinshujuDesktop.app`。
+            包为 ad-hoc 签名、未公证，系统提示属正常；Windows 未签名会出现 SmartScreen。
+            详见各包内 `README-RELEASE.txt` 与 docs/RELEASE.md。
           files: |
             release-assets/JinshujuDesktop-*.zip
+            release-assets/JinshujuDesktop-*.dmg
             release-assets/SHA256SUMS.txt

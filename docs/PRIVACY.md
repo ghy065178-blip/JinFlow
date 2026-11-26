@@ -54,7 +54,8 @@ panel_url.txt / control_panel_error.log / *.log / 多开任务/ / 多开任务/t
 ### 4. CI / 发布层
 
 - `ci.yml` 每个平台都执行 `python tools/check_no_pii.py --strict`，失败即中断。
-- `release.yml` 在打包后执行 `--strict --artifact <发布包>`，扫描 zip / 目录内的全部文本条目。
+- `release.yml` 在打包后执行 `--strict --artifact <发布包>`，扫描 zip / 目录内的全部文本条目；
+  对 `.dmg` 会在 macOS 上只读挂载后按目录扫描（非 macOS 不生成 DMG，挂载失败一律视为扫描失败）。
 - `packaging/build.py` 在生成归档前再次调用扫描器，并写出 `BUILD_INFO.txt` 与 `SHA256SUMS.txt`。
 - `tests/test_no_pii.py` 把「仓库干净」固化为单元测试，防止后续提交误带数据。
 

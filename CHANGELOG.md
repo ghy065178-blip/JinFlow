@@ -3,6 +3,41 @@
 本项目遵循语义化版本。版本号同时维护在 `src/jsj_desktop/__init__.py`、
 `pyproject.toml` 与 `packaging/version_info.txt`。
 
+## 1.0.3 (2026-11-26)
+
+macOS 首次启动体验修复（对应反馈：第一次解压出来的 `.app` 提示
+「应用程序 "JinshujuDesktop.app" 无法打开」，再解压 / 复制一次却正常）。
+
+### 诊断
+- 检查 v1.0.2 的 `JinshujuDesktop-macos-arm64.zip`：433 个条目均为 Unix
+  条目，可执行文件 `Contents/MacOS/JinshujuDesktop` 权限 0755、19 个符号
+  链接完整、CA 根证书与 `_CodeSignature` 齐全，**归档与二进制没有损坏**；
+  CI 也实机执行过 `--check-tls`。
+- 根因在 macOS 分发环节：浏览器下载的 zip 带 `com.apple.quarantine`，
+  从解压目录直接双击未公证 `.app` 会触发 Gatekeeper / App Translocation
+  （只读随机路径运行）；截图中目录位于 iCloud 云盘桌面且提示「iCloud 储存
+  空间已满」、文件名带云朵图标，说明 430 个文件组成的 bundle 当时可能仍是
+  云端占位符，LaunchServices 因此报通用「应用程序无法打开」。重新解压或
+  复制得到完整本地副本后即可正常启动，与现象一致。
+
+### 修复
+- macOS 目标同时产出 **DMG**（单文件只读映像，含「应用程序」拖放快捷方式）
+  与原有 zip；Release 页面与包内 `README-RELEASE.txt` 明确引导「拖入应用程序
+  后再打开」，不要直接在下载目录 / iCloud 桌面双击。
+- `stage_and_pack` 复制 `.app` 后重做 ad-hoc 签名并 `codesign --verify`，
+  保证 `CodeResources` 与最终 bundle 一致。
+- `check_no_pii` 支持 `.dmg`：在 macOS 上挂载后 `scan_tree`，挂载失败即失败。
+- CI 新增 `Verify macOS distribution (user flow)`：模拟用户解压 zip 与挂载
+  DMG，分别检查可执行位、`codesign --verify --deep --strict` 并实跑
+  `--check-tls`；`SHA256SUMS.txt` 覆盖 zip 与 dmg。
+- 新增 10 项分发回归测试；全量 95 项通过。
+
+### 仍无法在 Windows 侧根治
+- Apple Developer ID 签名与公证必须在 macOS 上用付费开发者账号完成；
+  在此之前 Gatekeeper 提示仍需用户手动允许或 `xattr -dr com.apple.quarantine`。
+
+---
+
 ## 1.0.2 (2026-11-26)
 
 macOS 版 HTTPS 证书链修复（对应反馈：Mac 上「读取表单」失败、软件无法正常使用）。

@@ -86,3 +86,4 @@
 | 弹窗要求补充信息 | 关闭「自动应答缺项」后属于正常交互；也可在「实时终端」的手动输入行应答 |
 | 窗口打不开 / 报 tkinter 缺失 | 使用官方 Python 安装包并勾选 Tcl/Tk；或临时用 `--cli` |
 | macOS 上「读取表单」失败、提示 `CERTIFICATE_VERIFY_FAILED` | 1.0.2 起已随包携带 CA 根证书；可命令行运行 `JinshujuDesktop.app/Contents/MacOS/JinshujuDesktop --check-tls` 诊断，并检查系统时间与网络代理 |
+| macOS 双击提示「应用程序 "JinshujuDesktop.app" 无法打开」，但再解压 / 复制一次就正常 | 不是软件损坏：下载的 `.app` 带隔离属性会从随机只读路径运行，若目录在 iCloud 桌面且同步未完成（截图提示「iCloud 储存空间已满」、文件名带云朵图标），bundle 内文件尚未落地。1.0.3 起请用 `.dmg` 拖入「应用程序」；或把 zip 解压到本机「下载」、等同步完成、把 `.app` 拖到本地目录后打开；必要时 `xattr -dr com.apple.quarantine /Applications/JinshujuDesktop.app` |

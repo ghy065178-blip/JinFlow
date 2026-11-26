@@ -45,7 +45,7 @@ jinshuju-registration-desktop/
 │   └── ui/                         # 原生图形界面
 │       ├── theme.py / widgets.py   # 复刻原面板 CSS 的深色主题、状态卡、滚动容器、彩色日志
 │       └── main_window.py          # 与原面板一致的单页主窗口（含菜单/弹窗附加入口）
-├── tests/                          # 85 项单元测试（含界面一致性）+ 合成样例
+├── tests/                          # 95 项单元测试（含界面一致性）+ 合成样例
 │   └── fixtures/                   # 合成 GraphQL 响应与黄金数据
 ├── legacy/auto_submit_reference.py # 旧脚本只读参考副本（已移除内置 token）
 ├── examples/                       # 占位符示例档案（非真实数据）
@@ -62,7 +62,7 @@ jinshuju-registration-desktop/
 │   ├── build.py                    # PyInstaller 构建 + 打包 + PII 扫描
 │   ├── entitlements.plist          # macOS 签名 entitlements
 │   ├── version_info.txt            # Windows 可执行文件版本资源
-│   ├── make_dmg.sh                 # 可选：生成 macOS DMG
+│   ├── make_dmg.sh                 # 可选：手工生成 DMG（build.py 已自动生成）
 │   └── icons/README.md             # 可选图标放置说明
 └── tools/
     ├── check_no_pii.py             # 仓库/发布包敏感数据扫描器
@@ -118,7 +118,12 @@ python tools/check_no_pii.py --strict         # 敏感数据扫描
 
 ### 发布包
 
-在 [Releases](../../releases) 下载对应平台的 zip / dmg，解压后双击可执行文件即可；**无需安装 Python**。
+在 [Releases](../../releases) 下载对应平台的包；**无需安装 Python**。
+Windows 解压 zip 后双击 `JinshujuDesktop.exe`。
+**macOS 请优先下载 `.dmg`**：打开后把 `JinshujuDesktop.app` 拖到卷内「应用程序」图标，
+再从「应用程序」启动。不要直接在下载的 zip、解压文件夹或 iCloud 桌面 / 云盘目录里双击 `.app`，
+否则可能因隔离属性（quarantine / App Translocation）或云同步未完成而提示「应用程序无法打开」；
+详见包内 `README-RELEASE.txt`。
 
 ---
 
@@ -156,8 +161,8 @@ python tools/check_no_pii.py --strict         # 敏感数据扫描
 
 | 发布包 | 架构 | GitHub Actions runner | 说明 |
 |---|---|---|---|
-| `JinshujuDesktop-macos-x86_64.zip` | Intel Mac | `macos-15-intel` / `macos-26-intel` | 原生 x86_64，Rosetta 不需要 |
-| `JinshujuDesktop-macos-arm64.zip` | Apple Silicon | `macos-15` / `macos-26` | 原生 arm64 |
+| `JinshujuDesktop-macos-x86_64.dmg` + `.zip` | Intel Mac | `macos-15-intel` / `macos-26-intel` | 原生 x86_64；优先用 DMG |
+| `JinshujuDesktop-macos-arm64.dmg` + `.zip` | Apple Silicon | `macos-15` / `macos-26` | 原生 arm64；优先用 DMG |
 | `JinshujuDesktop-windows-x86_64.zip` | Windows AMD64 | `windows-2022` / `windows-2025` | 原生 x64 |
 | `JinshujuDesktop-windows-arm64.zip` | Windows ARM64 | `windows-11-arm` | 原生 ARM64，Python 3.11+ |
 
@@ -166,8 +171,8 @@ python tools/check_no_pii.py --strict         # 敏感数据扫描
 1. **PyInstaller 6.10+ 必须在目标架构本机构建**（不是交叉编译器）。四平台各用一个原生 runner，禁止用 x64 runner 交叉产出 ARM64 包。
 2. 使用官方 CPython 3.11+（Windows ARM64 从 3.11 起提供官方安装包），并确认包含 **Tcl/Tk**；运行时不需要 pip 安装任何包。
 3. 构建产物用 `--onedir --windowed`，macOS 生成 `.app`，Windows 生成无控制台窗口的目录。
-4. 每次构建都执行 `tools/check_no_pii.py --strict --artifact <发布包>`，并生成 `SHA256SUMS.txt`。
-5. **macOS**：正式对外发布需 Apple Developer ID 签名 + 公证（notarization）；未签名包会触发 Gatekeeper 拦截，需用户手动「仍要打开」。
+4. 每次构建都执行 `tools/check_no_pii.py --strict --artifact <发布包>`（zip 按条目扫描、DMG 挂载后扫描），并生成 `SHA256SUMS.txt`。
+5. **macOS**：同时产出 zip 与 DMG（推荐）。复制 `.app` 后重做 ad-hoc 签名；CI 会模拟用户「解压 zip → 启动」和「挂载 DMG → 启动」两条路径并验证 `codesign`。正式对外发布仍需 Apple Developer ID 签名 + 公证；当前为 ad-hoc 签名，Gatekeeper 会提示，需用户手动「仍要打开」或执行 `xattr -dr com.apple.quarantine`。
 6. **Windows**：未签名包会触发 SmartScreen 提示；建议用 EV/OV 代码签名证书签名。
 7. `windows-11-arm` runner 对公开仓库免费；私有仓库需更大的付费 runner 或自托管 ARM64 代理。
 
@@ -182,7 +187,7 @@ python tools/check_no_pii.py --strict         # 敏感数据扫描
 - `calibrate_clock` 6 次采样取中位数、`build_input` 的 `fillingDuration`、`submit_once` 的 success / wait / fatal / net / maybe 判定；
 - 等待心跳、提前量 `-6`、间隔 `0.05`、时长 `40`、冲刺随机抖动、重复提交保护与 `--quick` / `--dry-run` 语义。
 
-`tests/test_legacy_parity.py` 直接加载 `legacy/auto_submit_reference.py`（旧脚本只读副本，仅移除了内置活动 token），逐项比对输出；`tests/test_mapping.py` 用黄金数据断言最终提交值。当前共 **85 项测试全部通过**。
+`tests/test_legacy_parity.py` 直接加载 `legacy/auto_submit_reference.py`（旧脚本只读副本，仅移除了内置活动 token），逐项比对输出；`tests/test_mapping.py` 用黄金数据断言最终提交值。当前共 **95 项测试全部通过**。
 
 > 唯一有意的业务差异：移除了内置的某次真实活动表单 token（隐私要求）。用户填写链接后，行为与「回车=使用上次链接」保持一致。
 

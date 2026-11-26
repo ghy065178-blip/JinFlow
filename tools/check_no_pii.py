@@ -5,6 +5,7 @@
 用法：
     python tools/check_no_pii.py --strict                 # 扫描仓库
     python tools/check_no_pii.py --strict --artifact dist/xxx.zip
+    python tools/check_no_pii.py --strict --artifact dist/xxx.dmg   # 仅 macOS
     python tools/check_no_pii.py --self-test              # 自检检测规则
 
 检查项：
@@ -18,7 +19,10 @@
 import argparse
 import json
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -181,11 +185,40 @@ def scan_tree(root):
     return findings
 
 
+def scan_dmg(path):
+    """挂载 DMG 后按目录扫描；仅 macOS 可用（Windows 上不会生成 DMG）。
+
+    DMG 是二进制映像，无法像 zip 一样按条目读取，因此真实挂载后复用
+    scan_tree；挂载失败视为扫描失败，绝不放行未检查的发布包。
+    """
+    if sys.platform != "darwin":
+        return []
+    mount = Path(tempfile.mkdtemp(prefix="jsj-dmg-"))
+    proc = None
+    try:
+        proc = subprocess.run(
+            ["hdiutil", "attach", "-nobrowse", "-readonly",
+             "-mountpoint", str(mount), str(path)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if proc.returncode != 0:
+            return [(str(path), 0, "DMG 挂载失败：" +
+                     proc.stderr.decode("utf-8", "replace").strip()[:200])]
+        return scan_tree(mount)
+    finally:
+        if proc is not None and proc.returncode == 0:
+            subprocess.run(["hdiutil", "detach", str(mount)],
+                           stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
+        shutil.rmtree(mount, ignore_errors=True)
+
+
 def scan_artifact(path):
-    """扫描发布包（zip 或已解包目录）。"""
+    """扫描发布包（zip / DMG / 已解包目录）。"""
     path = Path(path)
     if path.is_dir():
         return scan_tree(path)
+    if path.suffix.lower() == ".dmg":
+        return scan_dmg(path)
     findings = []
     if not zipfile.is_zipfile(path):
         return [(str(path), 0, "发布包既不是目录也不是有效 zip")]

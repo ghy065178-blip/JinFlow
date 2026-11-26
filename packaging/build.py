@@ -12,6 +12,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -27,6 +28,46 @@ import check_no_pii                                      # noqa: E402
 APP = "JinshujuDesktop"
 VALID_TARGETS = {"macos-x86_64", "macos-arm64",
                  "windows-x86_64", "windows-arm64"}
+
+# 随包说明：macOS 从浏览器下载的 zip 会带 com.apple.quarantine，双击解压目录
+# 里的 .app 会触发 Gatekeeper / App Translocation；若目录位于 iCloud 云盘且
+# 同步未完成（bundle 里的文件只是云端占位符），LaunchServices 会直接报
+# 「应用程序 … 无法打开」。DMG + 拖入「应用程序」是标准规避方式。
+RELEASE_NOTES_MACOS = """JinshujuDesktop · macOS 首次运行必读
+=========================================
+
+【不要】直接在下载的压缩包、解压出来的文件夹、iCloud 桌面 / 云盘目录里
+双击 JinshujuDesktop.app。macOS 会给下载的 app 加上隔离属性并从随机只读
+路径运行；若该目录还在 iCloud 同步中，.app 内部的几百个文件可能尚未下载
+到本地，这两种情况都会出现「应用程序 "JinshujuDesktop.app" 无法打开」。
+
+正确做法（任选其一）：
+1) 推荐：打开同目录的 .dmg，把 JinshujuDesktop.app 拖到卷内的「应用程序」
+   图标上（即复制到 /Applications），再从「应用程序」启动。
+   DMG 是单个只读映像，不会被云同步拆散，也不需要解压工具还原 .app 内的
+   符号链接。
+2) 或：把 zip 解压到本机「下载」文件夹（不要放在 iCloud 桌面 / 云盘），
+   等同步完成，再把 .app 拖到「应用程序」或任意本地文件夹后打开。
+
+若仍提示「无法打开」或「已损坏」，在「终端」执行：
+   xattr -dr com.apple.quarantine /Applications/JinshujuDesktop.app
+也可右键 .app →「打开」→「仍要打开」。
+
+本包为 ad-hoc 签名、未经 Apple 公证（没有 Developer ID），系统提示属正常现象。
+网络 / 证书诊断（只读，不会提交任何数据）：
+   /Applications/JinshujuDesktop.app/Contents/MacOS/JinshujuDesktop --check-tls
+
+所有报名信息与多人档案只保存在本机用户数据目录，本包不含任何个人信息。
+首次运行请在左侧「运行配置」填写本次表单链接。
+详见仓库 README.md / docs/USER_GUIDE.md / docs/RELEASE.md。
+"""
+
+RELEASE_NOTES_WINDOWS = """双击 JinshujuDesktop/%s.exe 启动；建议先解压到本地文件夹再运行。
+首次运行请在左侧「运行配置」填写本次表单链接。
+所有报名信息与多人档案只保存在本机用户数据目录，本包不含任何个人信息。
+若出现 SmartScreen 提示，点「更多信息 → 仍要运行」。
+详见仓库 README.md / docs/USER_GUIDE.md / docs/RELEASE.md。
+""" % APP
 
 
 def locate_ca_bundle():
@@ -190,6 +231,11 @@ def stage_and_pack(target, out_root, version, sign_identity):
         shutil.copytree(source, dest, symlinks=True)
         if sign_identity:
             sign_macos(dest, sign_identity)
+        elif sys.platform == "darwin":
+            # 复制后重做 ad-hoc 签名：CodeResources 必须与最终 bundle 内容一致，
+            # 否则 Gatekeeper / LaunchServices 可能判定签名损坏而拒绝启动。
+            run(["codesign", "--force", "--deep", "--sign", "-", str(dest)])
+            run(["codesign", "--verify", "--deep", "--strict", str(dest)])
         inner = stage
     else:
         inner = stage / APP
@@ -214,10 +260,8 @@ def stage_and_pack(target, out_root, version, sign_identity):
     (inner / "BUILD_INFO.txt").write_text(build_info, encoding="utf-8")
     shutil.copy2(ROOT / "LICENSE", inner / "LICENSE.txt")
     (inner / "README-RELEASE.txt").write_text(
-        "双击 %s%s 启动；首次运行请在左侧「运行配置」填写本次表单链接。\n"
-        "所有报名信息与多人档案只保存在本机用户数据目录，本包不含任何个人信息。\n"
-        "详见仓库 README.md / docs/USER_GUIDE.md / docs/RELEASE.md。\n"
-        % (APP, ".app" if is_bundle else ".exe"), encoding="utf-8")
+        RELEASE_NOTES_MACOS if is_bundle else RELEASE_NOTES_WINDOWS,
+        encoding="utf-8")
 
     archive = out_root / ("%s-%s.zip" % (APP, target))
     if archive.exists():
@@ -237,9 +281,34 @@ def stage_and_pack(target, out_root, version, sign_identity):
     return archive
 
 
+def make_dmg(target, out_root):
+    """生成 macOS 单文件只读磁盘映像，供用户拖入「应用程序」后运行。
+
+    相比 zip：DMG 不会被 iCloud Drive 按文件拆散同步，也不需要解压工具
+    还原 .app 内的符号链接，从根源上避免「第一次解压的 .app 打不开」。
+    """
+    stage = out_root / "stage" / target
+    dmg = out_root / ("%s-%s.dmg" % (APP, target))
+    if dmg.exists():
+        dmg.unlink()
+    with tempfile.TemporaryDirectory(prefix="jsj-dmg-stage-") as tmp:
+        root = Path(tmp) / "volume"
+        shutil.copytree(stage, root, symlinks=True)
+        # 卷内提供「应用程序」快捷方式，用户直接把 .app 拖过去即可
+        try:
+            (root / "Applications").symlink_to("/Applications")
+        except (OSError, NotImplementedError):
+            pass
+        run(["hdiutil", "create", "-volname", APP, "-srcfolder", str(root),
+             "-ov", "-format", "UDZO", str(dmg)])
+    return dmg
+
+
 def write_checksums(out_root):
     lines = []
-    for archive in sorted(out_root.glob("*.zip")):
+    archives = sorted(list(out_root.glob("*.zip")) +
+                      list(out_root.glob("*.dmg")))
+    for archive in archives:
         h = hashlib.sha256()
         with open(archive, "rb") as fp:
             for chunk in iter(lambda: fp.read(1024 * 1024), b""):
@@ -287,6 +356,17 @@ def main(argv=None):
             print("  - %s%s : %s" % (rel, (":%d" % line) if line else "", reason))
         raise SystemExit(1)
     print("发布包 PII 扫描 OK")
+
+    if target.startswith("macos"):
+        dmg = make_dmg(target, out_root)
+        dmg_findings = check_no_pii.scan_artifact(dmg)
+        if dmg_findings:
+            print("DMG 敏感数据扫描失败：")
+            for rel, line, reason in dmg_findings[:20]:
+                print("  - %s%s : %s" %
+                      (rel, (":%d" % line) if line else "", reason))
+            raise SystemExit(1)
+        print("DMG 生成并扫描 OK：%s" % dmg.name)
 
     lines = write_checksums(out_root)
     print("\n完成：%s" % archive)
