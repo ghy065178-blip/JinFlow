@@ -1,0 +1,9 @@
+本文件仅说明链接格式，不是任何真实活动链接。
+
+在左栏「运行配置」的链接框中填入以下任一形式：
+
+  https://jsj.top/f/xxxxx      （完整链接，xxxxx 请替换为本次表单 token）
+  xxxxx                        （只填末尾 token，默认域名 https://jsj.top）
+  https://your-domain.example.com/f/xxxxx   （自定义金数据域名）
+
+程序不内置任何活动链接；留空或回车会复用本地保存的「上次链接」。

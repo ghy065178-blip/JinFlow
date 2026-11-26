@@ -1,0 +1,5 @@
+# 仅开发/构建/测试需要；运行时零第三方依赖（Python 3.11+ 标准库即可）。
+pyinstaller>=6.10        # 四平台打包
+certifi>=2024.1          # 构建时提取 CA 根证书随包分发（macOS 冻结应用必需）
+pytest>=8.0              # 可选：也可直接用 python -m unittest
+build>=1.2               # 可选：构建 sdist / wheel

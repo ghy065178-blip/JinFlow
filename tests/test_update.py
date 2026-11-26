@@ -78,7 +78,7 @@ def fake_ctx(mode="source", system="macos", target=TARGET, data_dir="/tmp/x"):
 
 
 class VersionCompatibilityTest(unittest.TestCase):
-    def test_every_legacy_version_upgrades_to_120(self):
+    def test_every_legacy_version_upgrades_to_130(self):
         for old in LEGACY:
             plan = vmod.upgrade_plan(old, "1.3.0")
             self.assertTrue(plan["update_available"], old)
@@ -220,7 +220,7 @@ class ClientTest(unittest.TestCase):
             with self.assertRaises(ChannelError):
                 client.fetch_latest(fetcher=offline)
 
-    def test_check_from_every_legacy_version_reports_120(self):
+    def test_check_from_every_legacy_version_reports_130(self):
         info = client.ReleaseInfo(synthetic_manifest(), "test")
         for old in LEGACY:
             result = client.check_for_update(current_version=old, target=TARGET,
@@ -552,7 +552,7 @@ class EndToEndUpdateTest(unittest.TestCase):
             return service.check_for_update(current_version=current,
                                             target=TARGET)
 
-    def test_check_detects_120_from_every_legacy_version(self):
+    def test_check_detects_130_from_every_legacy_version(self):
         for old in LEGACY:
             result = self._check(old)
             self.assertTrue(result.ok, old)
@@ -561,7 +561,7 @@ class EndToEndUpdateTest(unittest.TestCase):
             self.assertTrue(result.can_update)
             self.assertEqual(result.asset["name"], self.asset)
 
-    def test_full_upgrade_switches_to_120_without_touching_user_data(self):
+    def test_full_upgrade_switches_to_130_without_touching_user_data(self):
         result = self._check("1.0.3")
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = Path(tmp) / "data"
@@ -600,7 +600,7 @@ class EndToEndUpdateTest(unittest.TestCase):
         finally:
             self._fill(self.package, self.digest)
 
-    def test_noop_when_already_120(self):
+    def test_noop_when_already_130(self):
         result = self._check("1.3.0")
         with patch.object(mf, "channel_sources", return_value=self._sources()):
             outcome = service.apply_update(check=result, relaunch=False,
