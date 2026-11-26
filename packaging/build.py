@@ -246,9 +246,10 @@ def stage_and_pack(target, out_root, version, sign_identity):
     if is_bundle:
         dest = stage / (APP + ".app")
         shutil.copytree(source, dest, symlinks=True)
-        # 版本标记写在签名之前，保证 CodeResources 与最终 bundle 一致；
-        # 应用内升级用它确认安装后的实际版本，旧版检测也据此判断是否需要升级。
-        (dest / "Contents" / "APP_VERSION.txt").write_text(
+        # 版本标记写在签名之前，并放在 Contents/Resources（由 CodeResources
+        # 封签）。放在 Contents 根目录会被 codesign --verify --deep --strict
+        # 判定为「code object is not signed at all」，导致 DMG 校验失败。
+        (dest / "Contents" / "Resources" / "APP_VERSION.txt").write_text(
             "%s %s\n" % (APP, version), encoding="utf-8")
         if sign_identity:
             sign_macos(dest, sign_identity)
@@ -261,8 +262,11 @@ def stage_and_pack(target, out_root, version, sign_identity):
     else:
         inner = stage / APP
         shutil.copytree(source, inner, symlinks=True)
-        (inner / "APP_VERSION.txt").write_text(
-            "%s %s\n" % (APP, version), encoding="utf-8")
+
+    # 压缩包根目录也放一份版本标记（包外文件，不参与签名），供升级时
+    # 在解包后直接核对版本；Windows 版它就位于 JinshujuDesktop/ 目录内。
+    (inner / "APP_VERSION.txt").write_text(
+        "%s %s\n" % (APP, version), encoding="utf-8")
 
     try:
         commit = subprocess.check_output(
@@ -295,7 +299,8 @@ def stage_and_pack(target, out_root, version, sign_identity):
         run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent",
              str(stage / (APP + ".app")), str(archive)])
         with zipfile.ZipFile(archive, "a") as zf:
-            for extra in ("BUILD_INFO.txt", "LICENSE.txt", "README-RELEASE.txt"):
+            for extra in ("BUILD_INFO.txt", "LICENSE.txt",
+                         "README-RELEASE.txt", "APP_VERSION.txt"):
                 zf.write(inner / extra, extra)
     else:
         with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:

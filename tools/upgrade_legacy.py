@@ -100,7 +100,8 @@ def detect_version(app_path):
     if not app_path:
         return ""
     root = Path(app_path)
-    for rel in ("APP_VERSION.txt", "Contents/APP_VERSION.txt", "BUILD_INFO.txt"):
+    for rel in ("APP_VERSION.txt", "Contents/APP_VERSION.txt",
+                "Contents/Resources/APP_VERSION.txt", "BUILD_INFO.txt"):
         p = root / rel
         if p.is_file():
             m = VERSION_RE.search(p.read_text(encoding="utf-8", errors="replace")
@@ -194,7 +195,9 @@ def verify_package(root, target, version):
         launch = payload / (APP + ".exe")
     marker = ""
     for p in (payload / "APP_VERSION.txt", payload / "Contents" / "APP_VERSION.txt",
-              root / "BUILD_INFO.txt", root / APP / "BUILD_INFO.txt"):
+              payload / "Contents" / "Resources" / "APP_VERSION.txt",
+              root / "APP_VERSION.txt", root / "BUILD_INFO.txt",
+              root / APP / "BUILD_INFO.txt"):
         if p.is_file():
             m = VERSION_RE.search(p.read_text(encoding="utf-8", errors="replace")
                                   .splitlines()[0])

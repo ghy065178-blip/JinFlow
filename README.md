@@ -200,7 +200,7 @@ Windows 解压 zip 后双击 `JinshujuDesktop.exe`。
 - `calibrate_clock` 6 次采样取中位数、`build_input` 的 `fillingDuration`、`submit_once` 的 success / wait / fatal / net / maybe 判定；
 - 等待心跳、提前量 `-6`、间隔 `0.05`、时长 `40`、冲刺随机抖动、重复提交保护与 `--quick` / `--dry-run` 语义。
 
-`tests/test_legacy_parity.py` 直接加载 `legacy/auto_submit_reference.py`（旧脚本只读副本，仅移除了内置活动 token），逐项比对输出；`tests/test_mapping.py` 用黄金数据断言最终提交值。原有 **95 项测试全部继续通过**；1.2.0 新增 57 项更新功能回归，**全量 152 项通过**。
+`tests/test_legacy_parity.py` 直接加载 `legacy/auto_submit_reference.py`（旧脚本只读副本，仅移除了内置活动 token），逐项比对输出；`tests/test_mapping.py` 用黄金数据断言最终提交值。原有 **95 项测试全部继续通过**；1.2.0 新增 58 项更新功能回归，**全量 153 项通过**。
 
 > 唯一有意的业务差异：移除了内置的某次真实活动表单 token（隐私要求）。用户填写链接后，行为与「回车=使用上次链接」保持一致。
 

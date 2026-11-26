@@ -39,7 +39,7 @@ def platform_target(label=None):
 def _read_version_marker(root):
     root = Path(root)
     for rel in (VERSION_MARKER, "Contents/" + VERSION_MARKER,
-                "BUILD_INFO.txt"):
+                "Contents/Resources/" + VERSION_MARKER, "BUILD_INFO.txt"):
         path = root / rel
         try:
             text = path.read_text(encoding="utf-8")
@@ -188,8 +188,11 @@ def validate_package(root, target, version):
         launch = exe
 
     build_info = _find_build_info(root)
-    marker_roots = [payload,
-                    payload / "Contents" if system == "macos" else payload]
+    marker_roots = [payload]
+    if system == "macos":
+        marker_roots += [payload / "Contents",
+                         payload / "Contents" / "Resources"]
+    marker_roots.append(root)
     found_version = ""
     for candidate in marker_roots:
         found_version = _read_version_marker(candidate)

@@ -58,6 +58,17 @@ def synthetic_package_bytes(version="1.2.0", target=TARGET):
     return buf.getvalue()
 
 
+def run_py(args, env=None, timeout=90):
+    """跨平台运行子进程：强制 UTF-8，避免 Windows 中文输出用 cp1252 解码失败。"""
+    child_env = dict(os.environ)
+    child_env["PYTHONIOENCODING"] = "utf-8"
+    if env:
+        child_env.update(env)
+    return subprocess.run(args, cwd=str(ROOT), env=child_env,
+                          capture_output=True, text=True, encoding="utf-8",
+                          errors="replace", timeout=timeout)
+
+
 def fake_ctx(mode="source", system="macos", target=TARGET, data_dir="/tmp/x"):
     return {"frozen": mode != "source", "system": system, "target": target,
             "executable": "/tmp/x/JinshujuDesktop", "pid": 0, "mode": mode,
@@ -518,12 +529,15 @@ class EndToEndUpdateTest(unittest.TestCase):
     @classmethod
     def _fill(cls, package, digest):
         data = synthetic_manifest(cls.base)
-        data["assets"][TARGET]["sha256"] = ""
+        for target in mf.TARGETS:
+            data["assets"][target]["sha256"] = ""
+            # 各平台共用同一份合成包，保证 intel/arm64 macOS runner 都能下载
+            cls.resources[mf.asset_names(target)["zip"]] = package
         cls.resources["latest.json"] = json.dumps(
             data, ensure_ascii=False).encode("utf-8")
-        cls.resources[cls.asset] = package
-        cls.resources["SHA256SUMS.txt"] = (
-            "%s  %s\n" % (digest, cls.asset)).encode("utf-8")
+        cls.resources["SHA256SUMS.txt"] = "".join(
+            "%s  %s\n" % (digest, mf.asset_names(t)["zip"])
+            for t in mf.TARGETS).encode("utf-8")
 
     @classmethod
     def tearDownClass(cls):
@@ -595,24 +609,20 @@ class EndToEndUpdateTest(unittest.TestCase):
         self.assertIn("已是最新", outcome["message"])
 
     def test_cli_check_update_uses_manifest_override(self):
-        env = dict(os.environ)
-        env["PYTHONPATH"] = str(ROOT / "src")
-        env[mf.ENV_MANIFEST_URL] = "file://" + str(ROOT / "update" / "latest.json")
-        proc = subprocess.run(
-            [sys.executable, "-m", "jsj_desktop", "--check-update"],
-            cwd=str(ROOT), env=env, capture_output=True, text=True, timeout=60)
+        env = {"PYTHONPATH": str(ROOT / "src"),
+               mf.ENV_MANIFEST_URL: (ROOT / "update" / "latest.json").as_uri()}
+        proc = run_py([sys.executable, "-m", "jsj_desktop", "--check-update"],
+                      env=env)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("最新版本   : 1.2.0", proc.stdout)
         self.assertIn("当前版本   : 1.2.0", proc.stdout)
 
     def test_legacy_helper_checks_all_old_versions(self):
         helper = ROOT / "tools" / "upgrade_legacy.py"
-        url = "file://" + str(ROOT / "update" / "latest.json")
+        url = (ROOT / "update" / "latest.json").as_uri()
         for old in LEGACY:
-            proc = subprocess.run(
-                [sys.executable, str(helper), "--check",
-                 "--current-version", old, "--manifest-url", url],
-                cwd=str(ROOT), capture_output=True, text=True, timeout=60)
+            proc = run_py([sys.executable, str(helper), "--check",
+                           "--current-version", old, "--manifest-url", url])
             self.assertEqual(proc.returncode, 0, proc.stderr)
             self.assertIn("直接升级到 1.2.0", proc.stdout)
 
@@ -621,14 +631,12 @@ class EndToEndUpdateTest(unittest.TestCase):
     def test_legacy_helper_full_upgrade_against_local_release(self):
         helper = ROOT / "tools" / "upgrade_legacy.py"
         with tempfile.TemporaryDirectory() as tmp:
-            env = dict(os.environ)
-            env["JSJ_DATA_DIR"] = str(Path(tmp) / "data")
-            proc = subprocess.run(
+            env = {"JSJ_DATA_DIR": str(Path(tmp) / "data")}
+            proc = run_py(
                 [sys.executable, str(helper), "--upgrade",
                  "--current-version", "1.0.1", "--no-relaunch",
                  "--manifest-url", self.base + "latest.json"],
-                cwd=str(ROOT), env=env, capture_output=True, text=True,
-                timeout=90)
+                env=env, timeout=120)
             self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
             self.assertIn("已切换到 v1.2.0", proc.stdout)
             marker = (Path(tmp) / "data" / "updates" / "1.2.0" /
@@ -659,6 +667,13 @@ class ReleaseConfigTest(unittest.TestCase):
                        "verify_manifest_in_archive(archive)",
                        "检查更新与升级"):
             self.assertIn(needle, text)
+
+    def test_macos_version_marker_is_inside_sealed_resources(self):
+        # 放在 Contents/ 根目录会被 codesign --verify --deep --strict 判为
+        # "code object is not signed at all"（CI 的 DMG 用户流程验证会失败）
+        text = (ROOT / "packaging" / "build.py").read_text(encoding="utf-8")
+        self.assertIn('"Contents" / "Resources" / "APP_VERSION.txt"', text)
+        self.assertNotIn('"Contents" / "APP_VERSION.txt"', text)
 
     def test_release_workflow_publishes_channel_assets(self):
         text = (ROOT / ".github" / "workflows" / "release.yml").read_text(
@@ -706,9 +721,8 @@ class ReleaseConfigTest(unittest.TestCase):
         self.assertIn("检查更新", text)
 
     def test_channel_validator_succeeds(self):
-        proc = subprocess.run(
-            [sys.executable, "tools/check_update_channel.py", "--offline"],
-            cwd=str(ROOT), capture_output=True, text=True, timeout=60)
+        proc = run_py([sys.executable, "tools/check_update_channel.py",
+                       "--offline"])
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("校验通过", proc.stdout)
 
