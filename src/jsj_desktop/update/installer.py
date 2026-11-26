@@ -465,7 +465,10 @@ def _apply_windows_install(plan, relaunch, runner, pid):
                                     stdin=subprocess.DEVNULL, stdout=output,
                                     stderr=subprocess.STDOUT, close_fds=True,
                                     env_overrides=env_overrides)
-            deadline = time.monotonic() + 15
+            # Windows ARM runners and first-run PowerShell startup can take
+            # longer than the x64 path.  Keep the handoff alive long enough
+            # to observe its ready marker before reporting a launch failure.
+            deadline = time.monotonic() + 60
             while not ready.is_file():
                 if worker.poll() is not None:
                     output.flush()
