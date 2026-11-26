@@ -1478,6 +1478,8 @@ class MainWindow(Tk):
         self._resolved_theme = apply_theme(self, self.theme_mode,
                                            self.system_mode)
         refresh_tree(self, old_palette, PALETTE)
+        if hasattr(self, "log_view"):
+            self.log_view.retheme()
         for window_name in ("preview_window", "settings_window", "update_window"):
             window = getattr(self, window_name, None)
             try:
