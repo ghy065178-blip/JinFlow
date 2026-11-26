@@ -421,8 +421,12 @@ def _apply_windows_install(plan, relaunch, runner, pid):
     staged = None
     try:
         updates.mkdir(parents=True, exist_ok=True)
-        handoff = Path(tempfile.mkdtemp(prefix="upgrade-%s-" % plan["version"],
-                                       dir=str(updates)))
+        # Keep the script itself in the system temp directory.  Windows
+        # PowerShell parses script paths before the script can read its
+        # environment, so an install path containing ``&`` or a quote must
+        # not also be used as the script path.
+        handoff = Path(tempfile.mkdtemp(prefix="jsj-upgrade-%s-" %
+                                       plan["version"]))
         staged = Path(tempfile.mkdtemp(prefix=old.name + ".new-", dir=str(old.parent)))
         shutil.copytree(plan["payload_dir"], staged, symlinks=True, dirs_exist_ok=True)
         script = handoff / "install.ps1"
