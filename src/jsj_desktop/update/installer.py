@@ -321,6 +321,11 @@ WINDOWS_SCRIPT = r"""param(
     [int]$ParentId, [int]$Relaunch
 )
 $ErrorActionPreference = 'Stop'
+$Target = $env:JSJ_UPDATE_TARGET
+$Staged = $env:JSJ_UPDATE_STAGED
+$Backup = $env:JSJ_UPDATE_BACKUP
+$ParentId = [int]$env:JSJ_UPDATE_PARENT_ID
+$Relaunch = [int]$env:JSJ_UPDATE_RELAUNCH
 $log = Join-Path $PSScriptRoot 'install.log'
 $exe = Join-Path $Target 'JinshujuDesktop.exe'
 $movedOld = $false
@@ -391,9 +396,11 @@ try {
 
 
 def _windows_popen(cmd, runner, **kwargs):
+    env_overrides = kwargs.pop("env_overrides", None) or {}
     env = {key: value for key, value in os.environ.items()
            if not key.startswith("_PYI_") and key != "_MEIPASS2"}
     env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    env.update(env_overrides)
     # PyInstaller's DLL search directory otherwise carries over to PowerShell.
     bundle = getattr(sys, "_MEIPASS", None)
     if sys.platform == "win32" and bundle:
@@ -432,15 +439,21 @@ def _apply_windows_install(plan, relaunch, runner, pid):
     powershell = Path(os.environ.get("SystemRoot", r"C:\Windows")) / (
         "System32/WindowsPowerShell/v1.0/powershell.exe")
     cmd = [str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive",
-           "-ExecutionPolicy", "RemoteSigned", "-File", str(script),
-           "-Target", str(old), "-Staged", str(staged), "-Backup", plan["backup_path"],
-           "-ParentId", str(pid), "-Relaunch", "1" if relaunch else "0"]
+           "-ExecutionPolicy", "Bypass", "-File", str(script)]
+    env_overrides = {
+        "JSJ_UPDATE_TARGET": str(old),
+        "JSJ_UPDATE_STAGED": str(staged),
+        "JSJ_UPDATE_BACKUP": plan["backup_path"],
+        "JSJ_UPDATE_PARENT_ID": str(pid),
+        "JSJ_UPDATE_RELAUNCH": "1" if relaunch else "0",
+    }
     try:
         with startup_log.open("wb") as output:
             worker = _windows_popen(cmd, runner, cwd=str(handoff),
                                     creationflags=0x00000008 | 0x00000200,
                                     stdin=subprocess.DEVNULL, stdout=output,
-                                    stderr=subprocess.STDOUT, close_fds=True)
+                                    stderr=subprocess.STDOUT, close_fds=True,
+                                    env_overrides=env_overrides)
             deadline = time.monotonic() + 15
             while not ready.is_file():
                 if worker.poll() is not None:

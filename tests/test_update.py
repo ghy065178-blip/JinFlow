@@ -503,7 +503,7 @@ class InstallerTest(unittest.TestCase):
 
             def spawn(args, **kwargs):
                 self.assertTrue(args[0].endswith("powershell.exe"))
-                self.assertEqual(args[-1], "0")  # 安装后不启动程序
+                self.assertEqual(kwargs["env"]["JSJ_UPDATE_RELAUNCH"], "0")
                 script = Path(args[args.index("-File") + 1])
                 self.assertTrue(script.is_file())
                 (script.parent / "ready").touch()
