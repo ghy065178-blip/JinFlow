@@ -444,7 +444,12 @@ def _apply_windows_install(plan, relaunch, runner, pid):
         deadline = time.monotonic() + 15
         while not ready.is_file():
             if worker.poll() is not None:
-                raise RuntimeError("PowerShell 进程已退出。")
+                try:
+                    details = startup_log.read_text(encoding="utf-8-sig").strip()
+                except OSError:
+                    details = ""
+                raise RuntimeError("PowerShell 进程已退出。%s" %
+                                   ((" 日志：" + details[-2000:]) if details else ""))
             if time.monotonic() >= deadline:
                 worker.kill()
                 worker.wait()
