@@ -32,10 +32,15 @@ BINARY_EXT = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".icns", ".pdf",
               ".zip", ".7z", ".exe", ".dll", ".so", ".dylib", ".pyd",
               ".pyc", ".woff", ".ttf", ".otf", ".mp4", ".wasm", ".enc"}
 
-# PyInstaller 冻结后随包携带的 Tcl/Tk 运行时数据（编码表 .enc 等）含大量纯数字
-# 表格，不是用户数据；跳过内容模式匹配，但仍执行文件名/扩展名禁用检查。
+# PyInstaller 冻结后随包携带的运行时数据：Tcl/Tk 编码表（.enc）与 CA 根证书
+# （cacert.pem）含大量纯数字/Base64 文本，不是用户数据；跳过内容模式匹配，
+# 但仍执行文件名禁用检查（私钥 .pem 依旧会被拦截）。
 RUNTIME_DATA_MARKERS = ("/_tcl_data/", "/_tk_data/", "/tcl8/", "/tk8/",
-                        "/_internal/tcl/", "/_internal/tk/")
+                        "/_internal/tcl/", "/_internal/tk/",
+                        "/certs/cacert.pem")
+
+# 随包 CA 根证书是可信文件，豁免 .pem 私钥规则；仅在 certs/ 目录下生效
+TRUSTED_CA_FILES = {"cacert.pem"}
 
 FORBIDDEN_NAMES = [
     re.compile(r"^报名信息.*\.json$", re.I),
@@ -141,6 +146,10 @@ def _scan_json(rel, text, findings):
 
 
 def _check_name(name, rel, findings, is_dir=False):
+    normalized = "/" + str(rel).replace("\\", "/")
+    if (not is_dir and name.lower() in TRUSTED_CA_FILES
+            and "/certs/" in normalized):
+        return  # 随包 CA 根证书，不是私钥文件
     patterns = FORBIDDEN_DIRS if is_dir else FORBIDDEN_NAMES
     for pat in patterns:
         if pat.match(name):

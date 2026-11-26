@@ -45,7 +45,7 @@ jinshuju-registration-desktop/
 │   └── ui/                         # 原生图形界面
 │       ├── theme.py / widgets.py   # 复刻原面板 CSS 的深色主题、状态卡、滚动容器、彩色日志
 │       └── main_window.py          # 与原面板一致的单页主窗口（含菜单/弹窗附加入口）
-├── tests/                          # 84 项单元测试（含界面一致性）+ 合成样例
+├── tests/                          # 85 项单元测试（含界面一致性）+ 合成样例
 │   └── fixtures/                   # 合成 GraphQL 响应与黄金数据
 ├── legacy/auto_submit_reference.py # 旧脚本只读参考副本（已移除内置 token）
 ├── examples/                       # 占位符示例档案（非真实数据）
@@ -182,7 +182,7 @@ python tools/check_no_pii.py --strict         # 敏感数据扫描
 - `calibrate_clock` 6 次采样取中位数、`build_input` 的 `fillingDuration`、`submit_once` 的 success / wait / fatal / net / maybe 判定；
 - 等待心跳、提前量 `-6`、间隔 `0.05`、时长 `40`、冲刺随机抖动、重复提交保护与 `--quick` / `--dry-run` 语义。
 
-`tests/test_legacy_parity.py` 直接加载 `legacy/auto_submit_reference.py`（旧脚本只读副本，仅移除了内置活动 token），逐项比对输出；`tests/test_mapping.py` 用黄金数据断言最终提交值。当前共 **84 项测试全部通过**。
+`tests/test_legacy_parity.py` 直接加载 `legacy/auto_submit_reference.py`（旧脚本只读副本，仅移除了内置活动 token），逐项比对输出；`tests/test_mapping.py` 用黄金数据断言最终提交值。当前共 **85 项测试全部通过**。
 
 > 唯一有意的业务差异：移除了内置的某次真实活动表单 token（隐私要求）。用户填写链接后，行为与「回车=使用上次链接」保持一致。
 

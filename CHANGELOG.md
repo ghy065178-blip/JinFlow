@@ -20,7 +20,7 @@ macOS 版 HTTPS 证书链修复（对应反馈：Mac 上「读取表单」失败
 - 新增 `--check-tls` 诊断命令：只读 GET，输出 CA 路径并验证 HTTPS 证书链，不提交任何数据。
 
 ### 验证
-- 新增 9 项证书链回归测试；全量 84 项通过；`--check-tls` 实测 TLS 验证通过。
+- 新增 9 项证书链回归测试；全量 85 项通过；`--check-tls` 实测 TLS 验证通过。
 - Release 工作流增加 macOS 冻结应用的 `--check-tls` 实机验证。
 
 ---

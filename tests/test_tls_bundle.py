@@ -106,6 +106,26 @@ class CaBundleTest(unittest.TestCase):
                 module._ensure_ca_bundle()
                 self.assertEqual(os.environ.get("SSL_CERT_FILE"), str(ca))
 
+    def test_ca_bundle_in_release_package_is_not_false_positive(self):
+        """CA 证书里的 Base64/长数字不能被误判为 PII；私钥 .pem 仍须拦截。"""
+        sys.path.insert(0, str(ROOT / "tools"))
+        import check_no_pii
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = Path(tmp) / "release.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr(
+                    "JinshujuDesktop.app/Contents/Resources/certs/cacert.pem",
+                    "-----BEGIN CERTIFICATE-----\n"
+                    "MIIF996312345678901234567890123456789012345678\n")
+                zf.writestr(
+                    "JinshujuDesktop.app/Contents/Resources/certs/private.pem",
+                    "-----BEGIN PRIVATE KEY-----\n")
+            findings = check_no_pii.scan_artifact(archive)
+            self.assertFalse([f for f in findings if "cacert.pem" in f[0]],
+                             "随包 CA 证书不应被误报")
+            self.assertTrue([f for f in findings if "private.pem" in f[0]],
+                            "私钥 .pem 仍必须被拦截")
+
     def test_frozen_windows_keeps_system_cert_store(self):
         import importlib.util
         spec = importlib.util.spec_from_file_location(
