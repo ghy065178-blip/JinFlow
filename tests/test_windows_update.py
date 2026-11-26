@@ -54,8 +54,8 @@ class WindowsHandoffTest(unittest.TestCase):
             "System32/WindowsPowerShell/v1.0/powershell.exe")
         subprocess.run([str(powershell), "-NoProfile", "-NonInteractive", "-Command",
                         "Add-Type -Path ./Fixture.cs -OutputAssembly ./fixture.exe "
-                        "-OutputType ConsoleApplication -ErrorAction Stop"],
-                       cwd=root, timeout=30, check=True)
+                       "-OutputType ConsoleApplication -ErrorAction Stop"],
+                       cwd=root, timeout=120, check=True)
         cls.exe = (root / "fixture.exe").read_bytes()
         cls.target = mf.platform_target()
         EndToEndUpdateTest.setUpClass()

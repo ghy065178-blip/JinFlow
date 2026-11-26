@@ -87,7 +87,7 @@ jobs:
         if: startsWith(matrix.target, 'windows')
         shell: pwsh
         run: |
-          $marker = "dist/raw/${{ matrix.target }}/JinshujuDesktop/APP_VERSION.txt"
+          $marker = "dist/stage/${{ matrix.target }}/JinshujuDesktop/APP_VERSION.txt"
           Select-String -Path $marker -SimpleMatch "JinshujuDesktop ${{ steps.release_version.outputs.version }}"
 
       - name: Verify macOS binary architecture
