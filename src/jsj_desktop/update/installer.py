@@ -441,21 +441,23 @@ def _apply_windows_install(plan, relaunch, runner, pid):
                                     creationflags=0x00000008 | 0x00000200,
                                     stdin=subprocess.DEVNULL, stdout=output,
                                     stderr=subprocess.STDOUT, close_fds=True)
-        deadline = time.monotonic() + 15
-        while not ready.is_file():
-            if worker.poll() is not None:
-                output.flush()
-                try:
-                    details = startup_log.read_text(encoding="utf-8-sig").strip()
-                except OSError:
-                    details = ""
-                raise RuntimeError("PowerShell 进程已退出。%s" %
-                                   ((" 日志：" + details[-2000:]) if details else ""))
-            if time.monotonic() >= deadline:
-                worker.kill()
-                worker.wait()
-                raise RuntimeError("等待 PowerShell 就绪超时。")
-            time.sleep(0.05)
+            deadline = time.monotonic() + 15
+            while not ready.is_file():
+                if worker.poll() is not None:
+                    output.flush()
+                    try:
+                        details = startup_log.read_text(
+                            encoding="utf-8-sig").strip()
+                    except OSError:
+                        details = ""
+                    raise RuntimeError("PowerShell 进程已退出。%s" %
+                                       ((" 日志：" + details[-2000:])
+                                        if details else ""))
+                if time.monotonic() >= deadline:
+                    worker.kill()
+                    worker.wait()
+                    raise RuntimeError("等待 PowerShell 就绪超时。")
+                time.sleep(0.05)
     except Exception as e:
         shutil.rmtree(staged, ignore_errors=True)
         raise InstallError("无法启动 Windows 更新程序：%s" % e,
