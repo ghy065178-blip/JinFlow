@@ -3,6 +3,28 @@
 本项目遵循语义化版本。版本号同时维护在 `src/jsj_desktop/__init__.py`、
 `pyproject.toml` 与 `packaging/version_info.txt`。
 
+## 1.0.2 (2026-11-26)
+
+macOS 版 HTTPS 证书链修复（对应反馈：Mac 上「读取表单」失败、软件无法正常使用）。
+
+### 修复
+- 根因：macOS 的 Python/OpenSSL **不读取系统钥匙串**；PyInstaller 冻结后
+  `ssl.get_default_verify_paths()` 仍指向构建机路径，用户机器上不存在该 CA 文件，
+  所有 HTTPS 请求报 `CERTIFICATE_VERIFY_FAILED: unable to get local issuer
+  certificate`。Windows 走系统证书存储，因此只有 macOS 版受影响。
+- `packaging/build.py`：构建时用 `certifi` 的 CA bundle，随包加入 `certs/cacert.pem`；
+  打包后强制校验归档内确实存在该文件，缺失直接构建失败。
+- `packaging/entry_point.py`：冻结版 macOS 启动时设置 `SSL_CERT_FILE` 指向随包证书
+  （兼容 Resources / Frameworks 两种 PyInstaller 6 布局，并有系统路径兜底）。
+- `requirements-dev.txt` 增加 `certifi`（仅构建依赖，运行时仍零第三方依赖）。
+- 新增 `--check-tls` 诊断命令：只读 GET，输出 CA 路径并验证 HTTPS 证书链，不提交任何数据。
+
+### 验证
+- 新增 9 项证书链回归测试；全量 84 项通过；`--check-tls` 实测 TLS 验证通过。
+- Release 工作流增加 macOS 冻结应用的 `--check-tls` 实机验证。
+
+---
+
 ## 1.0.1 (2026-11-26)
 
 滚动体验修复（对应截图反馈：左栏只能通过拖动滚动条移动）。

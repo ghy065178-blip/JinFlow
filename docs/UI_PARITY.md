@@ -83,6 +83,6 @@
 
 ```bash
 python -m unittest tests.test_ui_parity -v     # 界面一致性静态回归
-python -m unittest discover -s tests -t . -v    # 全量 73 项
+python -m unittest discover -s tests -t . -v    # 全量 84 项
 ```
 另可用 `PYTHONPATH=src python -m jsj_desktop` 打开窗口，与浏览器版面板逐项对照。

@@ -29,6 +29,46 @@ VALID_TARGETS = {"macos-x86_64", "macos-arm64",
                  "windows-x86_64", "windows-arm64"}
 
 
+def locate_ca_bundle():
+    """返回可随包分发的 CA 根证书文件。
+
+    macOS 上的 Python/OpenSSL 不读取系统钥匙串；PyInstaller 冻结后
+    ssl.get_default_verify_paths() 指向构建机上的绝对路径，在用户机器上不存在，
+    所有 HTTPS 请求会报 CERTIFICATE_VERIFY_FAILED / unable to get local issuer
+    certificate。因此必须把一份 CA bundle 打进发布包。找不到就构建失败，
+    避免再次发布「能打开窗口但无法联网」的包。
+    """
+    candidates = []
+    try:
+        import certifi
+        candidates.append(certifi.where())
+    except ImportError:
+        pass
+    import ssl
+    paths = ssl.get_default_verify_paths()
+    candidates.append(paths.cafile)
+    candidates += [
+        "/etc/ssl/cert.pem",
+        "/etc/ssl/certs/ca-certificates.crt",
+        "/usr/local/etc/openssl/cert.pem",
+    ]
+    for candidate in candidates:
+        if candidate and os.path.isfile(candidate) \
+                and os.path.getsize(candidate) > 1000:
+            return candidate
+    raise SystemExit(
+        "构建失败：找不到 CA 根证书，无法生成可联网的 macOS 发布包。"
+        "请执行 pip install certifi 后重试。")
+
+
+def verify_ca_in_archive(archive):
+    """确保归档里确实带有 certs/cacert.pem（macOS 在 .app/Contents/Resources 下）。"""
+    with zipfile.ZipFile(archive) as zf:
+        names = zf.namelist()
+    if not any(name.endswith("certs/cacert.pem") for name in names):
+        raise SystemExit("发布包缺少 certs/cacert.pem，macOS 端 HTTPS 会失败")
+
+
 def run(cmd, **kwargs):
     print("+ " + " ".join(str(c) for c in cmd), flush=True)
     return subprocess.run([str(c) for c in cmd], check=True, **kwargs)
@@ -87,6 +127,8 @@ def build_frozen(target, out_root, version):
         p.mkdir(parents=True, exist_ok=True)
 
     sep = ";" if os.name == "nt" else ":"
+    ca_bundle = locate_ca_bundle()
+    print("随包 CA 根证书：%s" % ca_bundle)
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--noconfirm", "--clean", "--onedir", "--windowed",
@@ -100,6 +142,7 @@ def build_frozen(target, out_root, version):
         "--add-data", "%s%stests/fixtures" %
         (str(ROOT / "tests" / "fixtures" / "sample_form.json"), sep),
         "--add-data", "%s%s." % (str(ROOT / "LICENSE"), sep),
+        "--add-data", "%s%scerts" % (ca_bundle, sep),
     ]
     if target.startswith("macos"):
         cmd += ["--osx-bundle-identifier", "cn.jinshuju.desktop"]
@@ -234,6 +277,8 @@ def main(argv=None):
     build_frozen(target, out_root, args.version)
     archive = stage_and_pack(target, out_root, args.version,
                              args.sign_identity)
+    verify_ca_in_archive(archive)
+    print("发布包 CA 根证书检查 OK（certs/cacert.pem）")
 
     findings = check_no_pii.scan_artifact(archive)
     if findings:

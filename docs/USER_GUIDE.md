@@ -85,3 +85,4 @@
 | 提示「表单启用了验证码」 | 纯接口提交不可用，请网页端手动填写 |
 | 弹窗要求补充信息 | 关闭「自动应答缺项」后属于正常交互；也可在「实时终端」的手动输入行应答 |
 | 窗口打不开 / 报 tkinter 缺失 | 使用官方 Python 安装包并勾选 Tcl/Tk；或临时用 `--cli` |
+| macOS 上「读取表单」失败、提示 `CERTIFICATE_VERIFY_FAILED` | 1.0.2 起已随包携带 CA 根证书；可命令行运行 `JinshujuDesktop.app/Contents/MacOS/JinshujuDesktop --check-tls` 诊断，并检查系统时间与网络代理 |

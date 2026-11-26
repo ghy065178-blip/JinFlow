@@ -123,6 +123,7 @@ git push origin v1.0.0
 | macOS 提示「已损坏，无法打开」 | 未签名/未公证，或下载时带了 quarantine 属性；按第 5 节签名公证 |
 | Windows 提示 SmartScreen | 未做代码签名；用证书签名或提示用户手动放行 |
 | 构建产物被 PII 扫描拦截 | 检查是否把本地数据目录误加进 `--add-data`；只应包含 `tests/fixtures/` 合成样例。Tcl/Tk 编码表已列入运行时数据豁免，若仍有误报见 `docs/PRIVACY.md` |
+| macOS 版能开窗口但读取表单报 `CERTIFICATE_VERIFY_FAILED` | macOS 的 Python/OpenSSL 不读系统钥匙串，冻结包必须携带 `certs/cacert.pem`（构建脚本已强制校验）。1.0.2 起由 `packaging/entry_point.py` 设置 `SSL_CERT_FILE`；用 `--check-tls` 诊断 |
 | 私有仓库 `windows-11-arm` 无法启动 | 该托管 runner 仅对公开仓库免费；改用自托管 ARM64 runner |
 
 ## 8. 版本与变更

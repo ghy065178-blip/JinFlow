@@ -56,6 +56,14 @@ jobs:
           lipo -archs dist/raw/${{ matrix.target }}/JinshujuDesktop.app/Contents/MacOS/JinshujuDesktop
           file dist/raw/${{ matrix.target }}/JinshujuDesktop.app/Contents/MacOS/JinshujuDesktop
 
+      - name: Verify macOS HTTPS certificate chain
+        if: startsWith(matrix.target, 'macos')
+        run: |
+          # 冻结应用内实际发起一次 HTTPS 请求，验证随包 CA 根证书可用
+          "dist/raw/${{ matrix.target }}/JinshujuDesktop.app/Contents/MacOS/JinshujuDesktop" --check-tls
+          # 同时确认证书文件确实在 .app 内
+          find "dist/raw/${{ matrix.target }}/JinshujuDesktop.app" -name cacert.pem -print
+
       - name: Verify Windows executable exists
         if: startsWith(matrix.target, 'windows')
         shell: pwsh

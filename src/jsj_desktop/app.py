@@ -196,6 +196,38 @@ def run_self_test():
     return 0
 
 
+def run_tls_check():
+    """诊断 HTTPS 证书链与网络连通性（只读 GET，不会提交任何报名数据）。
+
+    macOS 命令行用法：
+        JinshujuDesktop.app/Contents/MacOS/JinshujuDesktop --check-tls
+    """
+    import ssl
+    import urllib.error
+    import urllib.request
+    print("=== HTTPS / 证书链诊断 ===")
+    print("Python      : %s | 平台: %s | 冻结: %s" %
+          (sys.version.split()[0], sys.platform,
+           getattr(sys, "frozen", False)))
+    print("SSL_CERT_FILE: %s" %
+          (os.environ.get("SSL_CERT_FILE") or "(未设置，使用系统默认)"))
+    paths = ssl.get_default_verify_paths()
+    print("默认 CA 路径 : cafile=%s capath=%s" % (paths.cafile, paths.capath))
+    url = "https://jsj.top/"
+    try:
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            print("HTTPS 连通   : HTTP %s（TLS 证书验证通过）" % resp.status)
+    except urllib.error.HTTPError as e:
+        # 只要 TLS 握手成功，服务器返回 4xx/5xx 也说明证书链正常
+        print("HTTPS 连通   : HTTP %s（TLS 证书验证通过）" % e.code)
+    except Exception as e:
+        print("HTTPS 失败   : %s: %s" % (type(e).__name__, str(e)[:300]))
+        print("提示：若为 CERTIFICATE_VERIFY_FAILED，说明缺少 CA 根证书；"
+              "请确认使用随包分发的 certs/cacert.pem。")
+        return 1
+    return 0
+
+
 def build_parser():
     p = argparse.ArgumentParser(
         description="金数据报名助手 · 桌面版（默认图形界面）")
@@ -203,6 +235,8 @@ def build_parser():
                    help="使用可选终端模式（默认启动图形界面）")
     p.add_argument("--self-test", action="store_true",
                    help="无界面逻辑自检（不联网）")
+    p.add_argument("--check-tls", action="store_true",
+                   help="诊断 HTTPS 证书链与网络连通性（只读，不提交数据）")
     p.add_argument("--version", action="version",
                    version="%(prog)s " + __import__(
                        "jsj_desktop", fromlist=["__version__"]).__version__)
@@ -224,6 +258,8 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     if args.self_test:
         return run_self_test()
+    if args.check_tls:
+        return run_tls_check()
     if args.cli:
         return run_cli(args)
     return run_gui(args)
