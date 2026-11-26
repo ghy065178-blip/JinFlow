@@ -324,10 +324,7 @@ $ErrorActionPreference = 'Stop'
 $Target = $env:JSJ_UPDATE_TARGET
 $Staged = $env:JSJ_UPDATE_STAGED
 $Backup = $env:JSJ_UPDATE_BACKUP
-$ParentId = [int]$env:JSJ_UPDATE_PARENT_ID
-$Relaunch = [int]$env:JSJ_UPDATE_RELAUNCH
 $log = Join-Path $PSScriptRoot 'install.log'
-$exe = Join-Path $Target 'JinshujuDesktop.exe'
 $movedOld = $false
 $movedNew = $false
 $parentExited = $false
@@ -349,6 +346,9 @@ function Open-App {
 }
 
 try {
+    $ParentId = [int]$env:JSJ_UPDATE_PARENT_ID
+    $Relaunch = [int]$env:JSJ_UPDATE_RELAUNCH
+    $exe = Join-Path $Target 'JinshujuDesktop.exe'
     $parent = [Diagnostics.Process]::GetProcessById($ParentId)
     $null = $parent.Handle
     if (-not [IO.File]::Exists($exe) -or
@@ -467,6 +467,14 @@ def _apply_windows_install(plan, relaunch, runner, pid):
                             encoding="utf-8-sig").strip()
                     except OSError:
                         details = ""
+                    try:
+                        install_details = log.read_text(
+                            encoding="utf-8-sig").strip()
+                    except OSError:
+                        install_details = ""
+                    if install_details:
+                        details = "\n".join(
+                            part for part in (details, install_details) if part)
                     raise RuntimeError("PowerShell 进程已退出。%s" %
                                        ((" 日志：" + details[-2000:])
                                         if details else ""))
