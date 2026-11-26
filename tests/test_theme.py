@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 import unittest
+import tkinter as tk
+from tkinter import ttk
 
-from jsj_desktop.ui.theme import normalize_mode, palette_for, resolve_mode
+from jsj_desktop.ui.theme import apply, normalize_mode, palette_for, resolve_mode
 
 
 class ThemeTest(unittest.TestCase):
@@ -27,6 +29,39 @@ class ThemeTest(unittest.TestCase):
         self.assertEqual(resolve_mode("dark", system_mode="light"), "dark")
         self.assertEqual(resolve_mode("light", system_mode="dark"), "light")
         self.assertEqual(resolve_mode("system", system_mode="dark"), "dark")
+
+    def test_theme_styles_keep_control_states_readable(self):
+        try:
+            root = tk.Tk()
+        except tk.TclError as exc:
+            self.skipTest(str(exc))
+        self.addCleanup(root.destroy)
+        root.withdraw()
+        style = ttk.Style(root)
+        for mode in ("light", "dark"):
+            with self.subTest(mode=mode):
+                apply(root, mode, system_mode="light")
+                palette = palette_for(mode)
+                cases = ((("readonly",), palette["input"]),
+                         (("readonly", "focus"), palette["highlight"]))
+                for state, background in cases:
+                    self.assertEqual(
+                        style.lookup("TCombobox", "fieldbackground", state), background)
+                    self.assertEqual(
+                        style.lookup("TCombobox", "foreground", state), palette["text"])
+                for state in (("readonly", "focus"), ("readonly", "!focus")):
+                    self.assertEqual(
+                        style.lookup("TCombobox", "selectbackground", state),
+                        palette["surface2"])
+                    self.assertEqual(
+                        style.lookup("TCombobox", "selectforeground", state),
+                        palette["text"])
+                self.assertEqual(
+                    style.lookup("Theme.TRadiobutton", "indicatorforeground", ("selected",)),
+                    palette["text"])
+                self.assertEqual(
+                    style.lookup("Theme.TRadiobutton", "indicatorbackground", ("pressed", "selected")),
+                    palette["highlight"])
 
 
 if __name__ == "__main__":

@@ -257,14 +257,25 @@ def apply(root, mode="system", system_mode=None):
                     foreground=p["text"], font=(family, 10))
     style.configure("Theme.TRadiobutton", background=p["glass"],
                     foreground=p["text"], font=(family, 10),
-                    indicatorcolor=p["surface2"],
+                    indicatorforeground=p["text"],
                     indicatorbackground=p["surface2"])
+    style.map("Theme.TRadiobutton", indicatorbackground=[("pressed", p["highlight"])])
 
     style.configure("TEntry", fieldbackground=p["input"], foreground=p["text"],
                     bordercolor=p["border"], padding=4, insertcolor=p["text"])
     style.configure("TCombobox", fieldbackground=p["input"],
                     foreground=p["text"], bordercolor=p["border"],
                     arrowcolor=p["muted"], padding=4)
+    # clam 的只读和选中状态配色会覆盖 configure 中的颜色。
+    style.map("TCombobox",
+              fieldbackground=[("readonly", "focus", p["highlight"]),
+                               ("readonly", p["input"])],
+              foreground=[("disabled", p["muted"]),
+                          ("readonly", p["text"])],
+              selectbackground=[("readonly", p["surface2"]),
+                                *style.map(".", "selectbackground")],
+              selectforeground=[("readonly", p["text"]),
+                                *style.map(".", "selectforeground")])
     style.configure("Treeview", background=p["input"], fieldbackground=p["input"],
                     foreground=p["text"], bordercolor=p["border"],
                     font=(family, 10))
