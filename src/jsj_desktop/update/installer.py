@@ -342,6 +342,10 @@ function Open-App {
     $start.FileName = $exe
     $start.WorkingDirectory = $Target
     $start.UseShellExecute = $false
+    if ($env:JSJ_UPDATE_FAILURE_LOG) {
+        $start.EnvironmentVariables['JSJ_UPDATE_FAILURE_LOG'] =
+            $env:JSJ_UPDATE_FAILURE_LOG
+    }
     [Diagnostics.Process]::Start($start)
 }
 
