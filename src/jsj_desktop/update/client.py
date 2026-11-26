@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import ssl
+import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -71,17 +72,29 @@ def _network_error(url, exc):
             hint = "GitHub 匿名接口可能触发限流，程序会自动尝试其它更新通道。"
         return NetworkError("访问更新通道失败（HTTP %s）。" % exc.code,
                             code="http-%s" % exc.code, hint=hint, cause=exc)
-    if isinstance(exc, (urllib.error.URLError, TimeoutError, OSError)):
-        return NetworkError("无法连接更新通道：%s" % (getattr(exc, "reason", exc)),
-                            code="connect", hint="请检查网络、代理与系统时间后重试。",
-                            cause=exc)
-    if isinstance(exc, ssl.SSLError):
-        return NetworkError("HTTPS 证书校验失败：%s" % exc,
+    reason = getattr(exc, "reason", exc)
+    if isinstance(reason, ssl.SSLCertVerificationError):
+        return NetworkError("HTTPS 证书校验失败：%s" % reason,
                             code="tls", hint="请检查系统时间与网络代理；"
                             "macOS 版可用 --check-tls 诊断随包 CA 根证书。",
                             cause=exc)
+    if isinstance(exc, (urllib.error.URLError, TimeoutError, OSError)):
+        return NetworkError("无法连接更新通道：%s" % reason,
+                            code="connect", hint="请检查网络、代理与系统时间后重试。",
+                            cause=exc)
     return NetworkError("访问更新通道时出现未知错误：%s" % exc,
                         code="unexpected", cause=exc)
+
+
+def _update_tls_context():
+    context = ssl.create_default_context()
+    bundle_root = getattr(sys, "_MEIPASS", None)
+    if sys.platform == "win32" and bundle_root:
+        bundle = Path(bundle_root) / "certs" / "cacert.pem"
+        if bundle.is_file() and bundle.stat().st_size > 1000:
+            # CPython 已载入 Windows ROOT / CA，随包根证书只作补充。
+            context.load_verify_locations(cafile=str(bundle))
+    return context
 
 
 def http_get(url, timeout=DEFAULT_TIMEOUT):
@@ -89,7 +102,7 @@ def http_get(url, timeout=DEFAULT_TIMEOUT):
     try:
         with urllib.request.urlopen(
                 _request(url), timeout=timeout,
-                context=ssl.create_default_context()) as resp:
+                context=_update_tls_context()) as resp:
             return resp.read()
     except Exception as e:  # noqa: BLE001 - 统一转换为带中文说明的异常
         raise _network_error(url, e)
@@ -100,7 +113,7 @@ def open_stream(url, timeout=DOWNLOAD_TIMEOUT):
     try:
         return urllib.request.urlopen(
             _request(url), timeout=timeout,
-            context=ssl.create_default_context())
+            context=_update_tls_context())
     except Exception as e:  # noqa: BLE001
         raise _network_error(url, e)
 

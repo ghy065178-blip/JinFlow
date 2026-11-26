@@ -1,9 +1,22 @@
 # -*- coding: utf-8 -*-
+import os
+import tempfile
 import unittest
 import tkinter as tk
+from pathlib import Path
 from tkinter import ttk
+from unittest.mock import patch
 
-from jsj_desktop.ui.theme import apply, normalize_mode, palette_for, resolve_mode
+from jsj_desktop.ui.main_window import MainWindow
+from jsj_desktop.ui.theme import (LEVEL_COLORS, apply, normalize_mode, palette_for,
+                                  resolve_mode)
+
+
+def _luminance(color):
+    rgb = [value / 255 for value in bytes.fromhex(color[1:])]
+    linear = [v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+              for v in rgb]
+    return sum(channel * weight for channel, weight in zip(linear, (0.2126, 0.7152, 0.0722)))
 
 
 class ThemeTest(unittest.TestCase):
@@ -62,6 +75,53 @@ class ThemeTest(unittest.TestCase):
                 self.assertEqual(
                     style.lookup("Theme.TRadiobutton", "indicatorbackground", ("pressed", "selected")),
                     palette["highlight"])
+                for foreground, background in ((palette["dim"], palette["glass"]),
+                                                (palette["muted"], palette["surface2"]),
+                                                (palette["amber"], palette["warnbox"]),
+                                                (palette["log_ts"], palette["log_bg"]),
+                                                *[(color, palette["log_bg"])
+                                                  for color in LEVEL_COLORS.values()]):
+                    with self.subTest(foreground=foreground, background=background):
+                        dark, light = sorted(map(_luminance, (foreground, background)))
+                        self.assertGreaterEqual((light + 0.05) / (dark + 0.05), 4.5)
+
+    def test_header_and_settings_share_theme_selection_without_rebuilding_ui(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+                os.environ, {"JSJ_DATA_DIR": directory}):
+            Path(directory, "settings.json").write_text(
+                '{"theme_mode":"system","check_update_on_startup":false}',
+                encoding="utf-8")
+            try:
+                window = MainWindow(data_dir=Path(directory))
+            except tk.TclError as exc:
+                if "display" not in str(exc):
+                    raise
+                self.skipTest(str(exc))
+            try:
+                window.withdraw()
+                self.assertTrue(hasattr(window, "header_theme_buttons"),
+                                "顶栏缺少三态主题控件")
+                header = dict(window.header_theme_widgets)
+                settings = {button.cget("value"): button for button in
+                            window.theme_buttons.winfo_children()}
+                self.assertEqual(set(header), {"dark", "system", "light"})
+                self.assertEqual(header["system"].cget("style"),
+                                 "SegmentActive.TButton")
+                window.link_var.set("EXAMPLE")
+                window.log_view.append("08:00:00", "info", "主题测试")
+                for buttons, mode in ((header, "dark"), (settings, "light"),
+                                      (header, "system")):
+                    with self.subTest(mode=mode):
+                        buttons[mode].invoke()
+                        self.assertEqual(header[mode].cget("style"),
+                                         "SegmentActive.TButton")
+                        self.assertTrue(settings[mode].instate(("selected",)))
+                        self.assertEqual(window.manager.settings.load()["theme_mode"], mode)
+                        self.assertEqual(window.link_var.get(), "EXAMPLE")
+                        self.assertIn("主题测试", window.log_view.text())
+                self.assertIs(window.left_scroll.master, window.term_frame.master)
+            finally:
+                window.destroy()
 
 
 if __name__ == "__main__":

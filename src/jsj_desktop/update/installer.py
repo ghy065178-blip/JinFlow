@@ -6,8 +6,7 @@
      的「版本 + 平台」再动安装位置；任何一步失败都保持现有版本原样。
   2. macOS 用「旧 .app 改名备份 → 新 .app 就位 → 重做 ad-hoc 签名 → 去隔离
      属性 → open -n 重启」；替换失败自动恢复备份。
-  3. Windows 运行中无法覆盖自身 exe，故先暂存新目录，再写一个独立 .cmd 在
-     进程退出后完成替换与重启，脚本内自带失败回滚。
+  3. Windows 先暂存新目录，独立 PowerShell 进程在旧程序退出后替换与重启。
   4. 源码运行 / 无写入权限时切换到 <数据目录>/updates/<版本>/ 并直接启动新版，
      不改动源码与任何报名数据。
 """
@@ -18,6 +17,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import zipfile
 from pathlib import Path
 
@@ -267,14 +267,13 @@ def plan_install(ctx, package, version):
     elif mode == "windows-dir":
         old = Path(ctx["install_root"])
         parent = old.parent
-        if parent.exists() and os.access(str(parent), os.W_OK):
+        data_inside_app = updates_root.resolve().is_relative_to(old.resolve())
+        if not data_inside_app and parent.exists() and os.access(str(parent), os.W_OK):
             return {"ok": True, "mode": "windows-dir", "can_auto": True,
                     "target_path": str(old),
                     "backup_path": str(_unique_path(
                         str(old) + ".backup-" + (ctx["current_version"] or "old"))),
-                    "staged_path": str(_unique_path(
-                        str(parent / (APP + ".new-" + version)))),
-                    "script_path": str(updates_root / ("upgrade-%s.cmd" % version)),
+                    "updates_root": str(updates_root),
                     "payload_dir": package["payload_dir"],
                     "launch_path": str(old / (APP + ".exe")),
                     "version": version,
@@ -316,40 +315,160 @@ def _popen(cmd, runner, **kwargs):
                            hint="请手动打开新版本所在目录启动程序。", cause=e)
 
 
-def _windows_script(plan, pid):
-    """生成退出后替换的 .cmd；用 f-string 拼接，避免 cmd 的 %VAR% 与 % 格式化冲突。"""
-    exe = APP + ".exe"
-    return "\r\n".join([
-        "@echo off",
-        "setlocal",
-        f'set "OLD={plan["target_path"]}"',
-        f'set "NEW={plan["staged_path"]}"',
-        f'set "BACKUP={plan["backup_path"]}"',
-        ":wait",
-        f'tasklist /FI "PID eq {pid}" /NH 2>nul | find "{pid}" >nul',
-        "if not errorlevel 1 (",
-        "  timeout /t 1 /nobreak >nul",
-        "  goto wait",
-        ")",
-        'if exist "%OLD%" move /Y "%OLD%" "%BACKUP%" >nul',
-        'move /Y "%NEW%" "%OLD%" >nul',
-        f'if not exist "%OLD%\\{exe}" (',
-        '  if exist "%BACKUP%" move /Y "%BACKUP%" "%OLD%" >nul',
-        "  exit /b 1",
-        ")",
-        f'start "" "%OLD%\\{exe}"',
-        "exit /b 0",
-        "",
-    ])
+WINDOWS_SCRIPT = r"""param(
+    [string]$Target, [string]$Staged, [string]$Backup,
+    [int]$ParentId, [int]$Relaunch
+)
+$ErrorActionPreference = 'Stop'
+$log = Join-Path $PSScriptRoot 'install.log'
+$exe = Join-Path $Target 'JinshujuDesktop.exe'
+$movedOld = $false
+$movedNew = $false
+$parentExited = $false
+
+function Write-Log([string]$Message) {
+    try {
+        [IO.File]::AppendAllText($log, "$(Get-Date -Format s) $Message`r`n", [Text.Encoding]::UTF8)
+    } catch {
+        [Console]::Error.WriteLine($_.Exception.Message)
+    }
+}
+
+function Open-App {
+    $start = New-Object System.Diagnostics.ProcessStartInfo
+    $start.FileName = $exe
+    $start.WorkingDirectory = $Target
+    $start.UseShellExecute = $false
+    [Diagnostics.Process]::Start($start)
+}
+
+try {
+    $parent = [Diagnostics.Process]::GetProcessById($ParentId)
+    $null = $parent.Handle
+    if (-not [IO.File]::Exists($exe) -or
+        -not [IO.File]::Exists((Join-Path $Staged 'JinshujuDesktop.exe'))) {
+        throw 'The old or staged executable is missing.'
+    }
+    Write-Log 'Waiting for the running application to close.'
+    [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'ready'), '')
+    if (-not $parent.WaitForExit(300000)) { throw 'The application did not close in time.' }
+    $parentExited = $true
+    $parent.Dispose()
+
+    [IO.Directory]::Move($Target, $Backup)
+    $movedOld = $true
+    [IO.Directory]::Move($Staged, $Target)
+    $movedNew = $true
+    if ($Relaunch -eq 1) {
+        $app = Open-App
+        if ($app.WaitForExit(1500) -and $app.ExitCode -ne 0) {
+            throw "The new application exited with error $($app.ExitCode)."
+        }
+        $app.Dispose()
+    }
+    Write-Log "Installed. Backup: $Backup"
+    exit 0
+} catch {
+    Write-Log "Installation failed: $($_.Exception.Message)"
+    try {
+        if ($movedNew) { [IO.Directory]::Move($Target, $Staged) }
+        if ($movedOld) {
+            [IO.Directory]::Move($Backup, $Target)
+            Write-Log 'Restored the original installation.'
+        }
+        if ($parentExited -and $Relaunch -eq 1) {
+            $env:JSJ_UPDATE_FAILURE_LOG = $log
+            $app = Open-App
+            $app.Dispose()
+        }
+    } catch {
+        Write-Log "Could not restore or reopen the old application: $($_.Exception.Message). Backup: $Backup"
+    }
+    exit 1
+}
+"""
+
+
+def _windows_popen(cmd, runner, **kwargs):
+    env = {key: value for key, value in os.environ.items()
+           if not key.startswith("_PYI_") and key != "_MEIPASS2"}
+    env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    # PyInstaller's DLL search directory otherwise carries over to PowerShell.
+    bundle = getattr(sys, "_MEIPASS", None)
+    if sys.platform == "win32" and bundle:
+        import ctypes
+        set_dll_directory = ctypes.windll.kernel32.SetDllDirectoryW
+        if not set_dll_directory(None):
+            raise ctypes.WinError()
+        try:
+            return _popen(cmd, runner, env=env, **kwargs)
+        finally:
+            set_dll_directory(ctypes.c_wchar_p(bundle))
+    return _popen(cmd, runner, env=env, **kwargs)
+
+
+def _apply_windows_install(plan, relaunch, runner, pid):
+    old = Path(plan["target_path"])
+    updates = Path(plan["updates_root"])
+    staged = None
+    try:
+        updates.mkdir(parents=True, exist_ok=True)
+        handoff = Path(tempfile.mkdtemp(prefix="upgrade-%s-" % plan["version"],
+                                       dir=str(updates)))
+        staged = Path(tempfile.mkdtemp(prefix=old.name + ".new-", dir=str(old.parent)))
+        shutil.copytree(plan["payload_dir"], staged, symlinks=True, dirs_exist_ok=True)
+        script = handoff / "install.ps1"
+        script.write_text(WINDOWS_SCRIPT, encoding="utf-8-sig")
+    except OSError as e:
+        if staged is not None:
+            shutil.rmtree(staged, ignore_errors=True)
+        raise InstallError("暂存新版本失败：%s" % e,
+                           hint="请检查磁盘空间和安装目录的写入权限。", cause=e)
+
+    log = handoff / "install.log"
+    startup_log = handoff / "startup.log"
+    ready = handoff / "ready"
+    powershell = Path(os.environ.get("SystemRoot", r"C:\Windows")) / (
+        "System32/WindowsPowerShell/v1.0/powershell.exe")
+    cmd = [str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive",
+           "-ExecutionPolicy", "RemoteSigned", "-File", str(script),
+           "-Target", str(old), "-Staged", str(staged), "-Backup", plan["backup_path"],
+           "-ParentId", str(pid), "-Relaunch", "1" if relaunch else "0"]
+    try:
+        with startup_log.open("wb") as output:
+            worker = _windows_popen(cmd, runner, cwd=str(handoff),
+                                    creationflags=0x00000008 | 0x00000200,
+                                    stdin=subprocess.DEVNULL, stdout=output,
+                                    stderr=subprocess.STDOUT, close_fds=True)
+        deadline = time.monotonic() + 15
+        while not ready.is_file():
+            if worker.poll() is not None:
+                raise RuntimeError("PowerShell 进程已退出。")
+            if time.monotonic() >= deadline:
+                worker.kill()
+                worker.wait()
+                raise RuntimeError("等待 PowerShell 就绪超时。")
+            time.sleep(0.05)
+    except Exception as e:
+        shutil.rmtree(staged, ignore_errors=True)
+        raise InstallError("无法启动 Windows 更新程序：%s" % e,
+                           hint="当前版本仍可使用。日志：%s" %
+                                (log if log.is_file() else startup_log), cause=e)
+    return {"ok": True, "mode": "windows-dir", "pending": True,
+            "installed_to": str(old), "backup": plan["backup_path"],
+            "staged": str(staged), "script": str(script), "log": str(log),
+            "launched": bool(relaunch),
+            "message": "新版已暂存，程序退出后将完成替换%s。" %
+                       ("并重启" if relaunch else "")}
 
 
 def apply_install(plan, relaunch=True, runner=None, pid=None):
     """执行安装计划；失败时回滚并抛 InstallError。runner 可注入便于测试。"""
-    runner = runner or subprocess.run
     pid = pid or os.getpid()
     mode = plan["mode"]
 
     if mode == "macos-app":
+        runner = runner or subprocess.run
         old = Path(plan["target_path"])
         backup = Path(plan["backup_path"])
         new_app = Path(plan["new_app"])
@@ -383,28 +502,7 @@ def apply_install(plan, relaunch=True, runner=None, pid=None):
                 "message": "已安装并切换到 %s（原版本已备份）。" % plan["version"]}
 
     if mode == "windows-dir":
-        staged = Path(plan["staged_path"])
-        script = Path(plan["script_path"])
-        try:
-            script.parent.mkdir(parents=True, exist_ok=True)
-            if staged.exists():
-                shutil.rmtree(str(staged))
-            shutil.copytree(plan["payload_dir"], str(staged), symlinks=True)
-            script.write_text(_windows_script(plan, pid), encoding="utf-8")
-        except Exception as e:
-            raise InstallError("暂存新版本失败：%s" % e,
-                               hint="现有版本未改动，请检查磁盘空间与写入权限。",
-                               cause=e)
-        if relaunch:
-            flags = 0x00000008 | 0x00000200  # DETACHED_PROCESS | NEW_GROUP
-            _popen(["cmd.exe", "/c", str(script)], runner,
-                   creationflags=flags, stdin=subprocess.DEVNULL,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                   close_fds=True)
-        return {"ok": True, "mode": mode, "installed_to": plan["target_path"],
-                "backup": plan["backup_path"], "staged": str(staged),
-                "script": str(script), "launched": bool(relaunch),
-                "message": "新版已暂存，程序退出后将自动完成替换并重启。"}
+        return _apply_windows_install(plan, relaunch, runner or subprocess.Popen, pid)
 
     # 源码运行 / 无写入权限 / 手动模式
     dest = Path(plan["target_path"])
@@ -421,7 +519,11 @@ def apply_install(plan, relaunch=True, runner=None, pid=None):
     if relaunch and plan.get("can_auto"):
         launch = Path(plan["launch_path"])
         if launch.is_file():
-            _popen([str(launch)], runner)
+            if sys.platform == "win32":
+                _windows_popen([str(launch)], runner or subprocess.Popen,
+                               cwd=str(launch.parent))
+            else:
+                _popen([str(launch)], runner or subprocess.Popen)
             launched = True
     return {"ok": True, "mode": "staged", "installed_to": str(dest),
             "backup": "", "launched": launched,

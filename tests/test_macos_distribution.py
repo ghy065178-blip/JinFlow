@@ -38,6 +38,21 @@ class MacOsDistributionTest(unittest.TestCase):
                       BUILD_PY)
         self.assertIn('"codesign", "--verify", "--deep", "--strict"', BUILD_PY)
 
+    def test_macos_build_passes_release_version_to_pyinstaller(self):
+        import plistlib
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "JinshujuDesktop.app"
+            info = bundle / "Contents" / "Info.plist"
+            info.parent.mkdir(parents=True)
+            with info.open("wb") as fp:
+                plistlib.dump({"CFBundleName": "JinshujuDesktop"}, fp)
+            packaging_build.set_macos_bundle_version(bundle, "1.2.0")
+            with info.open("rb") as fp:
+                data = plistlib.load(fp)
+        self.assertEqual(data["CFBundleShortVersionString"], "1.2.0")
+        self.assertEqual(data["CFBundleVersion"], "1.2.0")
+
     def test_scheme_b_icon_assets_are_present_and_wired(self):
         icons = ROOT / "packaging" / "icons"
         for name in ("app.svg", "app.icns", "app.ico"):

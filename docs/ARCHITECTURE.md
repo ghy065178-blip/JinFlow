@@ -40,8 +40,8 @@
 │   version → manifest → client → installer → service           │
 │   版本兼容 / 多来源清单 / 下载校验 / 安装切换 / 异常与回滚     │
 └───────────────┬──────────────────────────────────────────────┘
-                │ HTTPS（仅用户主动触发）
-        GitHub 静态清单 / Releases API / SHA256SUMS.txt / 发布包
+                │ HTTPS（启动后台检查或用户主动触发）
+  GitHub 静态清单 / Releases API / SHA256SUMS.txt / 发布包
 ```
 
 - 与 `core/` 完全解耦：不调用 `Endpoint`、不读写 `报名信息.json` / `profiles.json`，
@@ -49,11 +49,11 @@
 - 更新通道：`update/latest.json`（权威）→ GitHub Releases API → Release 资产
   `latest.json`，取版本号最高者；全部失败回退随包清单并禁止自动安装。
 - 安装前校验 `SHA256SUMS.txt`、包内 `APP_VERSION.txt` 与 `BUILD_INFO.txt` 的
-  版本 + 平台；macOS 备份旧 `.app` 后替换并重启，Windows 由独立 `.cmd` 在进程
-  退出后替换，源码运行切换到 `<数据目录>/updates/<版本>/`。
-- 历史版本 1.0.0～1.0.3 与本版本共用数据目录与配置格式；已冻结的旧包由
-  `tools/upgrade_legacy.py`（Release 资产 `JinshujuDesktop-Upgrade-Helper.py`）
-  作为一次性桥接。
+ 版本 + 平台；macOS 备份旧 `.app` 后替换并重启，Windows 由独立 PowerShell
+ 进程在旧程序退出后替换并回滚，源码运行切换到 `<数据目录>/updates/<版本>/`。
+- 历史版本 1.0.0～1.0.3 与本版本共用数据目录与配置格式；覆盖发布包包含同一套
+  更新入口，仍在使用旧冻结包时由 `tools/upgrade_legacy.py`（Release 资产
+  `JinshujuDesktop-Upgrade-Helper.py`）作为一次性桥接。
 - 所有异常统一为 `UpdateError` 子类，界面用 `user_message()` 显示原因与建议；
   失败时安装位置与报名数据保持原样。
 

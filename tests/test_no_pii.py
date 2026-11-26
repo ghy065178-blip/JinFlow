@@ -50,6 +50,17 @@ class PiiTest(unittest.TestCase):
                     "0000 908456789012345678\n18000000000\n")
             self.assertEqual(check_no_pii.scan_artifact(archive), [])
 
+    def test_macos_archive_metadata_is_ignored(self):
+        import os
+        import tempfile
+        import zipfile
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = os.path.join(tmp, "metadata.zip")
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("__MACOSX/JinshujuDesktop.app/._cacert.pem", "metadata")
+                zf.writestr("._JinshujuDesktop", "metadata")
+            self.assertEqual(check_no_pii.scan_artifact(archive), [])
+
     def test_release_package_with_real_personal_file_still_blocked(self):
         import os
         import tempfile

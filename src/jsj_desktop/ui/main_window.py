@@ -8,8 +8,8 @@
     main 左栏（运行配置 + 报名信息/个人信息档案）  右栏（实时终端）
     toast（右下角浮动提示）
 差异只在实现机制：本地 HTTP + SSE + 子进程 stdout 抓取 → 原生窗口 +
-线程安全事件队列 + 结构化应答。附加的高级设置/预览/迁移入口放在菜单与弹窗，
-不占用主界面，保证两处功能与呈现一致。
+线程安全事件队列 + 结构化应答。附加的高级设置/预览/迁移入口放在菜单与弹窗。
+启动检查发现新版本时，在顶部显示可点击的发布页入口。
 """
 import json
 import os
@@ -18,11 +18,13 @@ import subprocess
 import sys
 import threading
 import time
+import webbrowser
 from datetime import datetime
 from pathlib import Path
 import tkinter as tk
 from tkinter import (BOTH, END, LEFT, RIGHT, X, Y, BooleanVar, StringVar,
                      Tk, filedialog, messagebox, simpledialog, ttk)
+from urllib.parse import quote
 
 from .. import __app_name__, __version__
 from ..core.constants import (CONFIG_LINK_KEY, CST, MAX_TASKS,
@@ -30,6 +32,8 @@ from ..core.constants import (CONFIG_LINK_KEY, CST, MAX_TASKS,
 from ..core.rules import is_visible
 from ..data import paths as data_paths
 from ..tasks.manager import TaskManager
+from ..update.manifest import REPO_URL
+from ..update.version import normalize_version
 from .theme import (PALETTE, apply as apply_theme, detect_system_mode,
                     font_family, normalize_mode, refresh_tree)
 from .widgets import LogView, ScrollableFrame, StatusCard
@@ -37,6 +41,7 @@ from .widgets import LogView, ScrollableFrame, StatusCard
 TIME_MODE_TEXTS = ["使用表单返回的开放时间",
                    "手动指定另一个时间",
                    "不等待，立即提交"]
+THEME_CHOICES = (("dark", "黑色"), ("system", "跟随系统"), ("light", "白色"))
 
 
 class MainWindow(Tk):
@@ -50,6 +55,7 @@ class MainWindow(Tk):
         self.manager = TaskManager(self.event_queue, data_dir=data_dir)
         saved = self.manager.settings.load()
         self.theme_mode = normalize_mode(saved.get("theme_mode", "system"))
+        self.theme_mode_var = StringVar(value=self.theme_mode)
         self.system_mode = detect_system_mode()
         self._resolved_theme = apply_theme(self, self.theme_mode,
                                            self.system_mode)
@@ -82,28 +88,24 @@ class MainWindow(Tk):
 
         self.mask_var.set(bool(saved.get("mask_logs", False)))
         self.autoscroll_var.set(bool(saved.get("auto_scroll", True)))
-        self.theme_mode_var.set(self.theme_mode)
-        # 1.2.0：启动自动检查更新默认关闭，保持原有「不主动发起网络请求」行为
-        self.update_var.set(bool(saved.get("check_update_on_startup", False)))
-        if self.update_var.get():
-            self.after(2000, self._auto_check_update)
-
+        self.update_var.set(bool(saved.get("check_update_on_startup", True)))
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.after(80, self._poll)
         self._init_task(replay=True)
+        if self.update_var.get():
+            self.after_idle(self._auto_check_update)
 
     # ==================== 通用小组件 ====================
     def _panel(self, parent, title, tag=""):
         """复刻原 HTML 的 .panel / .panel-h / .panel-b。"""
-        outer = ttk.Frame(parent, style="Card.TFrame")
-        head = ttk.Frame(outer, style="CardHead.TFrame", padding=(12, 9))
-        head.pack(fill=X)
+        outer = ttk.Frame(parent, style="Glass.TFrame")
+        head = ttk.Frame(outer, style="CardHead.TFrame", padding=(8, 6))
+        head.pack(fill=X, padx=7, pady=(6, 0))
         ttk.Label(head, text=title, style="PanelTitle.TLabel").pack(side=LEFT)
-        tag_label = tk.Label(head, text=tag, bg=PALETTE["surface2"],
-                             fg=PALETTE["dim"], font=(font_family(), 9))
+        tag_label = ttk.Label(head, text=tag, style="PanelTag.TLabel")
         tag_label.pack(side=RIGHT)
-        body = ttk.Frame(outer, style="Card.TFrame", padding=(12, 12))
-        body.pack(fill=X)
+        body = ttk.Frame(outer, style="Card.TFrame", padding=(7, 7))
+        body.pack(fill=X, padx=7, pady=(0, 6))
         return outer, body, tag_label
 
     # ==================== 布局 ====================
@@ -141,9 +143,17 @@ class MainWindow(Tk):
     def _build_header(self):
         top = ttk.Frame(self, padding=(20, 14, 20, 10))
         top.pack(fill=X)
-        logo = tk.Label(top, text="J", bg=PALETTE["teal"], fg="#042f2e",
-                        font=(font_family(), 13, "bold"), width=3, height=1)
-        logo.pack(side=LEFT, padx=(0, 10))
+        self.header = top
+        ttk.Style(self).configure("Update.Primary.TButton", focuscolor="#042f2e")
+        self.update_banner = ttk.Button(self, style="Update.Primary.TButton",
+                                        takefocus=True, cursor="hand2")
+
+        def activate_banner(_event):
+            self.update_banner.invoke()
+            return "break"
+
+        self.update_banner.bind("<Return>", activate_banner)
+        ttk.Label(top, text="J", style="Brand.TLabel").pack(side=LEFT, padx=(0, 10))
         brand = ttk.Frame(top)
         brand.pack(side=LEFT)
         ttk.Label(brand, text="金数据报名 · 可视化控制平台",
@@ -154,32 +164,33 @@ class MainWindow(Tk):
         spacer = ttk.Frame(top)
         spacer.pack(side=LEFT, fill=X, expand=True)
 
-        conn = tk.Frame(top, bg=PALETTE["glass"], highlightbackground=PALETTE["border"],
-                        highlightthickness=1, padx=12, pady=5)
+        conn = ttk.Frame(top, style="Pill.TFrame", padding=(10, 6))
         conn.pack(side=LEFT, padx=(0, 8))
-        tk.Label(conn, text="●", bg=PALETTE["glass"], fg=PALETTE["green"],
-                 font=(font_family(), 9)).pack(side=LEFT, padx=(0, 6))
-        self.conn_text = tk.Label(conn, text="实时监控已连接",
-                                   bg=PALETTE["glass"], fg=PALETTE["muted"],
-                                   font=(font_family(), 9))
+        self.conn_text = ttk.Label(conn, text="●  实时监控已连接", style="Connected.TLabel")
         self.conn_text.pack(side=LEFT)
 
-        clock = tk.Frame(top, bg=PALETTE["glass"], highlightbackground=PALETTE["border"],
-                         highlightthickness=1, padx=12, pady=5)
-        clock.pack(side=LEFT)
+        clock = ttk.Frame(top, style="Pill.TFrame", padding=(10, 6))
+        clock.pack(side=LEFT, padx=(0, 8))
         self.clock_var = StringVar(value="--:--:--")
-        tk.Label(clock, text="北京时间 ", bg=PALETTE["glass"],
-                 fg=PALETTE["muted"], font=(font_family(), 9)).pack(side=LEFT)
-        tk.Label(clock, textvariable=self.clock_var, bg=PALETTE["glass"],
-                 fg=PALETTE["text"], font=(font_family(), 9, "bold")).pack(side=LEFT)
+        ttk.Label(clock, text="北京时间 ", style="CardMuted.TLabel").pack(side=LEFT, padx=(0, 6))
+        ttk.Label(clock, textvariable=self.clock_var,
+                  style="Clock.TLabel", width=8).pack(side=LEFT)
+
+        self.header_theme_buttons = ttk.Frame(top, style="Pill.TFrame", padding=4)
+        self.header_theme_buttons.pack(side=LEFT)
+        self.header_theme_widgets = {}
+        for value, label in THEME_CHOICES:
+            button = ttk.Button(
+                self.header_theme_buttons, text=label,
+                style="SegmentActive.TButton" if value == self.theme_mode
+                else "Segment.TButton",
+                command=lambda selected=value: self._set_header_theme(selected))
+            button.pack(side=LEFT, padx=1)
+            self.header_theme_widgets[value] = button
 
     def _build_taskbar(self):
-        bar = tk.Frame(self, bg=PALETTE["glass"],
-                       highlightbackground=PALETTE["border"],
-                       highlightthickness=1)
-        bar.pack(fill=X, padx=20, pady=(0, 12))
-        inner = ttk.Frame(bar, style="Card.TFrame", padding=(10, 8))
-        inner.pack(fill=X)
+        inner = ttk.Frame(self, style="Glass.TFrame", padding=(12, 8))
+        inner.pack(fill=X, padx=20, pady=(0, 12))
         ttk.Label(inner, text="多开任务", style="Teal.TLabel").pack(
             side=LEFT, padx=(0, 8))
         self.task_buttons = ttk.Frame(inner, style="Card.TFrame")
@@ -211,8 +222,9 @@ class MainWindow(Tk):
         for i, (key, label, value, note) in enumerate(specs):
             c = StatusCard(cards, label, note)
             c.value.configure(text=value)
-            c.grid(row=0, column=i, sticky="nsew", padx=6)
-            cards.columnconfigure(i, weight=1)
+            c.grid(row=0, column=i, sticky="nsew",
+                   padx=(0 if i == 0 else 5, 0 if i == len(specs) - 1 else 5))
+            cards.columnconfigure(i, weight=1, uniform="status")
             self.cards[key] = c
 
     def _build_main(self):
@@ -241,9 +253,9 @@ class MainWindow(Tk):
         outer, body, _tag = self._panel(self.left_scroll.body, "运行配置",
                                        "原脚本参数")
         outer.pack(fill=X, pady=(0, 12))
-        notice = tk.Label(
-            body, bg="#1b2430", fg="#a9bccd", font=(font_family(), 9),
-            wraplength=390, justify=LEFT, padx=10, pady=8,
+        notice = ttk.Label(
+            body, style="Notice.TLabel", wraplength=350, justify=LEFT,
+            padding=(10, 8),
             text="本平台不修改任何原有代码：原脚本作为子进程被托管，平台只读写"
                  "「报名信息.json」（写入前自动备份）。下方修改会即时用于下一次启动。")
         notice.pack(fill=X, pady=(0, 10))
@@ -261,25 +273,21 @@ class MainWindow(Tk):
                   "粘贴完整 URL（如 https://jsj.top/f/xxxxx）或末尾 token。",
                   style="CardHint.TLabel", wraplength=390).pack(anchor="w", pady=(4, 10))
 
-        grid = tk.Frame(body, bg=PALETTE["bg"],
-                        highlightbackground=PALETTE["border"], highlightthickness=1,
-                        padx=10, pady=8)
+        grid = ttk.Frame(body, style="Inset.TFrame", padding=(10, 8))
         grid.pack(fill=X)
         self.form_labels = {}
         for i, (k, label, initial) in enumerate([
                 ("name", "表单名称", "未读取"), ("status", "状态", "--"),
                 ("open", "开放时间", "--"), ("captcha", "验证码", "--"),
                 ("fields", "字段数", "--")]):
-            tk.Label(grid, text=label, bg=PALETTE["bg"], fg=PALETTE["dim"],
-                     font=(font_family(), 9)).grid(row=i, column=0, sticky="w", pady=2)
-            v = tk.Label(grid, text=initial, bg=PALETTE["bg"], fg=PALETTE["text"],
-                         font=(font_family(), 9), anchor="w", wraplength=290,
-                         justify=LEFT)
+            ttk.Label(grid, text=label, style="InsetKey.TLabel").grid(
+                row=i, column=0, sticky="w", pady=2)
+            v = ttk.Label(grid, text=initial, style="Inset.TLabel",
+                          wraplength=280, justify=LEFT)
             v.grid(row=i, column=1, sticky="w", padx=10, pady=2)
             self.form_labels[k] = v
-        self.warn_label = tk.Label(body, text="", bg="#2a2115", fg="#e3c07b",
-                                   font=(font_family(), 9), wraplength=390,
-                                   justify=LEFT, padx=10, pady=8)
+        self.warn_label = ttk.Label(body, text="", style="Warnbox.TLabel",
+                                    wraplength=350, justify=LEFT, padding=(10, 8))
 
         ttk.Label(body, text="运行方式", style="CardMuted.TLabel").pack(
             anchor="w", pady=(12, 4))
@@ -413,13 +421,12 @@ class MainWindow(Tk):
 
     # -------------------- 实时终端（右栏） --------------------
     def _build_logs(self):
-        outer = ttk.Frame(self.term_frame, style="Card.TFrame")
+        outer = ttk.Frame(self.term_frame, style="Glass.TFrame", padding=(7, 6))
         outer.pack(fill=BOTH, expand=True)
-        head = ttk.Frame(outer, style="CardHead.TFrame", padding=(12, 8))
+        head = ttk.Frame(outer, style="CardHead.TFrame", padding=(8, 6))
         head.pack(fill=X)
         ttk.Label(head, text="实时终端", style="PanelTitle.TLabel").pack(side=LEFT)
-        self.wait_label = tk.Label(head, text="", bg=PALETTE["surface2"],
-                                   fg="#e3c07b", font=(font_family(), 9))
+        self.wait_label = ttk.Label(head, text="", style="PanelWarn.TLabel")
         self.wait_label.pack(side=LEFT, padx=(8, 0))
         spacer = ttk.Frame(head, style="CardHead.TFrame")
         spacer.pack(side=LEFT, fill=X, expand=True)
@@ -432,7 +439,7 @@ class MainWindow(Tk):
                    command=self._export_logs).pack(side=LEFT)
 
         self.log_view = LogView(outer)
-        self.log_view.pack(fill=BOTH, expand=True, padx=1, pady=1)
+        self.log_view.frame.pack(fill=BOTH, expand=True, pady=(5, 0))
 
         send_bar = ttk.Frame(outer, style="CardHead.TFrame", padding=(10, 8))
         send_bar.pack(fill=X)
@@ -526,11 +533,9 @@ class MainWindow(Tk):
         theme_row.pack(fill=X, pady=(0, 8))
         ttk.Label(theme_row, text="界面主题", style="CardMuted.TLabel") \
             .pack(side=LEFT, padx=(0, 12))
-        self.theme_mode_var = StringVar(value=self.theme_mode)
         self.theme_buttons = ttk.Frame(theme_row, style="Card.TFrame")
         self.theme_buttons.pack(side=LEFT)
-        for value, label in (("dark", "黑色"), ("light", "白色"),
-                             ("system", "跟随系统")):
+        for value, label in THEME_CHOICES:
             ttk.Radiobutton(
                 self.theme_buttons, text=label, value=value,
                 variable=self.theme_mode_var, style="Theme.TRadiobutton",
@@ -543,8 +548,8 @@ class MainWindow(Tk):
         ttk.Checkbutton(adv, text="启动时逐项确认信息（等价于终端输入 m）",
                         variable=self.modify_var,
                         style="Card.TCheckbutton").pack(anchor="w", pady=(6, 0))
-        self.update_var = BooleanVar(value=False)
-        ttk.Checkbutton(adv, text="启动时自动检查新版本（需联网访问 GitHub，默认关闭）",
+        self.update_var = BooleanVar(value=True)
+        ttk.Checkbutton(adv, text="启动时自动检查新版本（需联网访问 GitHub）",
                         variable=self.update_var,
                         command=self._on_update_check_changed,
                         style="Card.TCheckbutton").pack(anchor="w", pady=(6, 0))
@@ -589,6 +594,9 @@ class MainWindow(Tk):
         try:
             while True:
                 kind, tid, payload = self.event_queue.get_nowait()
+                if kind == "startup_update":
+                    self._show_update_banner(payload)
+                    continue
                 self.manager.apply_event(kind, tid, payload)
                 self._handle_event(kind, tid, payload)
         except queue.Empty:
@@ -1480,6 +1488,7 @@ class MainWindow(Tk):
         refresh_tree(self, old_palette, PALETTE)
         if hasattr(self, "log_view"):
             self.log_view.retheme()
+            self._render_state()
         for window_name in ("preview_window", "settings_window", "update_window"):
             window = getattr(self, window_name, None)
             try:
@@ -1490,6 +1499,7 @@ class MainWindow(Tk):
                         retheme()
             except tk.TclError:
                 pass
+        self._sync_header_theme_widgets()
         if persist:
             settings = self.manager.settings.load()
             settings["theme_mode"] = self.theme_mode
@@ -1500,9 +1510,19 @@ class MainWindow(Tk):
         if self.theme_mode == "system":
             self.system_mode = detect_system_mode()
         self._apply_theme()
+        self._sync_header_theme_widgets()
         self._toast("界面主题已切换为%s" % {
             "dark": "黑色", "light": "白色", "system": "跟随系统"
         }[self.theme_mode])
+
+    def _set_header_theme(self, mode):
+        self.theme_mode_var.set(mode)
+        self._on_theme_changed()
+
+    def _sync_header_theme_widgets(self):
+        for value, button in getattr(self, "header_theme_widgets", {}).items():
+            button.configure(style=("SegmentActive.TButton" if value == self.theme_mode
+                                     else "Segment.TButton"))
 
     def _on_mask_changed(self):
         s = self.manager.settings.load()
@@ -1540,7 +1560,7 @@ class MainWindow(Tk):
             "· 可在「帮助 → 设置与关于」勾选「日志脱敏显示」隐藏手机号与长数字；\n"
             "· 详情见 docs/PRIVACY.md。"))
 
-    # -------------------- 1.2.0 应用内检查更新（附加能力，不占主界面） ------
+    # -------------------- 应用内检查更新 --------------------
     def _show_update(self):
         """「帮助 → 检查更新与升级…」：独立弹窗，主界面布局与功能保持不变。"""
         try:
@@ -1561,18 +1581,30 @@ class MainWindow(Tk):
                     ("开启" if self.update_var.get() else "关闭"))
 
     def _auto_check_update(self):
-        """可选的启动检查：失败静默，仅在发现新版本时提示，不改动任何数据。"""
+        """后台检查更新，由主线程消费结果。"""
+        events = self.event_queue
+
         def work():
             try:
                 from ..update import service
-                r = service.check_for_update()
-                if r.ok and r.update_available:
-                    text = ("发现新版本 v%s，可用「帮助 → 检查更新与升级」更新"
-                            % r.latest_version)
-                    self.after(0, lambda: self._toast(text, "warn"))
+                events.put(("startup_update", None, service.check_for_update()))
             except Exception:
                 pass
         threading.Thread(target=work, daemon=True).start()
+
+    def _show_update_banner(self, result):
+        if not result.ok or result.offline or not result.update_available:
+            return
+        try:
+            if normalize_version(result.tag) != result.latest_version:
+                return
+        except ValueError:
+            return
+        url = REPO_URL + "/releases/tag/" + quote(result.tag, safe="")
+        self.update_banner.configure(
+            text="发现新版本 v%s · 打开 GitHub 发布页" % result.latest_version,
+            command=lambda: webbrowser.open_new_tab(url))
+        self.update_banner.pack(after=self.header, fill=X, padx=20, pady=(0, 10))
 
     def _about(self):
         messagebox.showinfo("关于", "%s · 桌面版 v%s\n\n%s" %

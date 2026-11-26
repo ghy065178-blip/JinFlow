@@ -166,11 +166,14 @@ def scan_tree(root):
     findings = []
     root = Path(root)
     for dirpath, dirnames, filenames in __import__("os").walk(root):
-        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+        dirnames[:] = [d for d in dirnames
+                       if d not in SKIP_DIRS and d != "__MACOSX"]
         rel_dir = Path(dirpath).relative_to(root)
         for d in dirnames:
             _check_name(d, str(rel_dir / d), findings, is_dir=True)
         for name in filenames:
+            if name.startswith("._"):
+                continue
             rel = str(rel_dir / name) if str(rel_dir) != "." else name
             _check_name(name, rel, findings)
             if name in SKIP_FILES or Path(name).suffix.lower() in BINARY_EXT:
@@ -225,6 +228,8 @@ def scan_artifact(path):
     with zipfile.ZipFile(path) as zf:
         for info in zf.infolist():
             name = info.filename
+            if name.startswith("__MACOSX/") or "/._" in name or name.startswith("._"):
+                continue
             parts = name.rstrip("/").split("/")
             leaf = parts[-1] if parts else name
             if any(p in SKIP_DIRS for p in parts[:-1]):

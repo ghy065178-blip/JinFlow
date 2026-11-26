@@ -217,7 +217,7 @@ Windows 解压 zip 后双击 `JinshujuDesktop.exe`。
 - `tests/fixtures/` 与 `examples/` 只有合成数据和占位符（`<姓名占位>` 等）。
 - `tools/check_no_pii.py` 在 CI、发布前与打包脚本中强制执行；同时检查「禁止文件名、真实链接、内置 token、手机号、身份证号、非占位的个人信息键、硬编码凭据」。
 - 运行日志默认只在内存中；导出的日志、档案文件由用户显式选择保存位置。可勾选「日志脱敏显示」（只影响显示，不影响提交数据）。
-- 1.2.0 的检查更新功能只在用户主动触发时访问 GitHub（清单 / Releases API / 下载），请求中不含任何报名信息、档案或表单 token；默认关闭启动自动检查。详见 `docs/PRIVACY.md`。
+- 1.2.0 起，启动时默认在后台访问 GitHub 检查新版本。检查与下载请求均不包含报名信息、档案或表单 token。详见 `docs/PRIVACY.md`。
 - 详见 `docs/PRIVACY.md`。
 
 ---
@@ -233,18 +233,18 @@ Windows 解压 zip 后双击 `JinshujuDesktop.exe`。
 |---|---|
 | 检查来源 | `update/latest.json` 静态清单（权威）、GitHub Releases API、Release 资产 `latest.json`；取其中版本号最高者；全部失败则显示随包兜底信息并禁止自动安装 |
 | 校验 | 下载 `SHA256SUMS.txt`，与清单内置哈希交叉核对，任一不一致即中止 |
-| 安装 | macOS 备份旧 `.app` → 重做 ad-hoc 签名 → 去隔离属性 → 重启；Windows 暂存新目录并由独立脚本在退出后替换；源码运行切换到 `<数据目录>/updates/1.3.0/` |
+| 安装 | macOS 备份旧 `.app` → 重做 ad-hoc 签名 → 去隔离属性 → 重启；Windows 暂存新目录并由独立 PowerShell 进程在退出后替换、回滚；源码运行切换到 `<数据目录>/updates/1.3.0/` |
 | 失败处理 | 网络、限流、证书、清单、资产、校验和、版本/架构不符、写入失败均有明确中文提示；旧版本与报名数据保持原样 |
 | 历史版本 | 1.0.0 / 1.0.1 / 1.0.2 / 1.0.3 均可直接升到 1.3.0；四版本共用同一数据目录与配置格式，无需迁移 |
 
-> 已发布的 1.0.x 冻结包内没有更新代码，无法凭空获得应用内检查能力：这些用户
+> 覆盖发布后的 1.0.x～1.3.0 安装包共用同一套更新修复。仍在使用旧冻结包时，
 > 可下载 Release 资产 `JinshujuDesktop-Upgrade-Helper.py`，用本机 Python 执行
 > `python JinshujuDesktop-Upgrade-Helper.py --upgrade` 一次即可校验并切换到
-> 1.3.0；或直接下载对应平台的 1.3.0 安装包覆盖安装。1.2.0 起均可在应用内升级。
+> 1.3.0；Windows 原位修复当前版本前请关闭应用并使用 `--repair --app`。1.2.0 起均可在应用内升级。
 
-「帮助 → 设置与关于」可勾选「启动时自动检查新版本」，**默认关闭**；只有用户
-主动打开更新窗口、触发升级或显式开启该开关时才会访问 GitHub，且不上传任何
-报名信息。详见 `docs/RELEASE.md` 与 `docs/PRIVACY.md`。
+启动时默认在后台检查新版本。在线检查发现新版本后，主窗口顶部会显示更新按钮，
+点击可在系统浏览器打开对应版本的 GitHub 发布页。在「帮助 → 设置与关于」取消
+勾选「启动时自动检查新版本」即可关闭。详见 `docs/RELEASE.md` 与 `docs/PRIVACY.md`。
 
 ---
 
@@ -269,7 +269,7 @@ A：在左栏「报名信息」为每人存一套档案；点「+ 新建任务�
 A：不会。旧版文件保持原样，用菜单「导入旧版数据…」或 `tools/migrate_legacy.py` 复制到新的用户数据目录即可。1.3.0 的应用内升级也完全不读写 `报名信息.json` / `profiles.json`。
 
 **Q：1.0.x 旧版本怎么升到 1.3.0？**
-A：旧冻结包没有更新代码，请下载 Release 资产 `JinshujuDesktop-Upgrade-Helper.py` 运行 `python JinshujuDesktop-Upgrade-Helper.py --upgrade`，或直接下载 1.3.0 安装包覆盖；数据目录通用。1.2.0 之后可直接在「帮助 → 检查更新与升级…」完成。
+A：已重新发布的对应安装包包含统一更新修复。仍在使用旧冻结包时，请下载 Release 资产 `JinshujuDesktop-Upgrade-Helper.py` 运行 `python JinshujuDesktop-Upgrade-Helper.py --upgrade`，或直接覆盖安装 1.3.0。数据目录通用，1.2.0 之后可在「帮助 → 检查更新与升级…」完成。
 
 **Q：检查更新提示失败怎么办？**
 A：弹窗会给出具体原因（网络、GitHub 限流、证书、缺少校验和、版本/架构不符等）。可检查网络与系统时间、稍后重试，或用「复制下载链接」手动下载；失败时当前版本与数据不会改变。

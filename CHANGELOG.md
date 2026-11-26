@@ -32,8 +32,8 @@
 - 「帮助 → 检查更新与升级…」弹窗：显示当前版本、最新版本、适用平台、更新通道
   与版本说明；一键下载 → 校验 → 安装 → 重启；失败用弹窗给出原因与建议，
   且不改动现有版本与报名数据。
-- 可选的「启动时自动检查新版本」开关（`settings.json` 的
-  `check_update_on_startup`，默认关闭，保持原有不主动联网行为）。
+- 启动时默认在后台检查新版本。在线检查发现新版本后，主窗口顶部显示对应版本的
+  GitHub 发布页按钮。可在「设置与关于」关闭自动检查。
 - 命令行：`--check-update`（只读显示版本信息）、`--apply-update`、
   `--no-relaunch`、`--manifest-url`。
 - `update/latest.json` 版本无关清单；`tools/generate_update_manifest.py` 在

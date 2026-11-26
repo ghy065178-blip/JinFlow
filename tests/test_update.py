@@ -9,12 +9,14 @@ import hashlib
 import io
 import json
 import os
+import ssl
 import stat
 import subprocess
 import sys
 import tempfile
 import threading
 import unittest
+import urllib.error
 import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -43,14 +45,20 @@ def synthetic_manifest(download_base="https://example.invalid/v1.3.0/"):
 
 
 def synthetic_package_bytes(version="1.3.0", target=TARGET):
-    """构造与真实发布包同结构的 macos 合成 zip（无个人信息）。"""
+    """构造与真实发布包同结构的合成 zip。"""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("JinshujuDesktop.app/Contents/MacOS/JinshujuDesktop",
-                    "#!/bin/sh\nexit 0\n")
-        zf.writestr("JinshujuDesktop.app/Contents/APP_VERSION.txt",
-                    "JinshujuDesktop %s\n" % version)
-        zf.writestr("BUILD_INFO.txt",
+        if target.startswith("windows"):
+            archive_root = "JinshujuDesktop/"
+            zf.writestr(archive_root + "JinshujuDesktop.exe", "synthetic executable")
+            zf.writestr(archive_root + "APP_VERSION.txt", "JinshujuDesktop %s\n" % version)
+        else:
+            archive_root = ""
+            zf.writestr("JinshujuDesktop.app/Contents/MacOS/JinshujuDesktop",
+                        "#!/bin/sh\nexit 0\n")
+            zf.writestr("JinshujuDesktop.app/Contents/APP_VERSION.txt",
+                        "JinshujuDesktop %s\n" % version)
+        zf.writestr(archive_root + "BUILD_INFO.txt",
                     "JinshujuDesktop %s\ntarget    : %s\n"
                     "runtime   : Python standard library only\n"
                     % (version, target))
@@ -188,6 +196,31 @@ class ManifestTest(unittest.TestCase):
 
 
 class ClientTest(unittest.TestCase):
+    def test_wrapped_tls_verification_failure_is_reported(self):
+        failure = urllib.error.URLError(
+            ssl.SSLCertVerificationError(1, "certificate verify failed"))
+        with patch.object(client.urllib.request, "urlopen", side_effect=failure):
+            for request in (client.http_get, client.open_stream):
+                with self.subTest(request=request.__name__), \
+                        self.assertRaises(UpdateError) as caught:
+                    request("https://example.invalid/update")
+                self.assertEqual(caught.exception.code, "tls")
+
+    def test_frozen_windows_update_adds_bundled_ca_to_default_trust(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "certs" / "cacert.pem"
+            bundle.parent.mkdir()
+            bundle.write_bytes(b"x" * 1001)
+            with patch.object(sys, "platform", "win32"), \
+                    patch.object(sys, "_MEIPASS", tmp, create=True), \
+                    patch.object(ssl, "create_default_context") as create_context, \
+                    patch.object(client.urllib.request, "urlopen") as opener:
+                client.open_stream("https://example.invalid/update")
+            create_context.assert_called_once_with()
+            ctx = create_context.return_value
+            ctx.load_verify_locations.assert_called_once_with(cafile=str(bundle))
+            self.assertIs(opener.call_args.kwargs["context"], ctx)
+
     def test_fetch_latest_picks_highest_version(self):
         low = dict(synthetic_manifest(), latest_version="1.0.3",
                    upgrade_target="1.0.3", tag="v1.0.3")
@@ -386,7 +419,18 @@ class InstallerTest(unittest.TestCase):
             Path(ctx["install_root"]).mkdir(parents=True)
             plan = installer.plan_install(ctx, self._package(tmp), "1.3.0")
             self.assertEqual(plan["mode"], "windows-dir")
-            self.assertTrue(plan["script_path"].endswith(".cmd"))
+            self.assertEqual(Path(plan["updates_root"]), Path(tmp) / "updates")
+
+    def test_plan_windows_uses_staged_install_when_app_contains_data_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old = Path(tmp) / "JinshujuDesktop"
+            old.mkdir()
+            ctx = fake_ctx("windows-dir", system="windows",
+                           target="windows-x86_64", data_dir=str(old / "data"))
+            ctx["install_root"] = str(old)
+            plan = installer.plan_install(ctx, self._package(tmp), "1.3.0")
+            self.assertEqual(plan["mode"], "staged")
+            self.assertTrue(Path(plan["target_path"]).is_relative_to(old / "data"))
 
     def test_plan_install_source_mode_is_staged(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -444,27 +488,50 @@ class InstallerTest(unittest.TestCase):
             self.assertTrue(old.exists())
             self.assertEqual((old / "marker").read_text(), "old")
 
-    def test_apply_install_windows_writes_replacement_script(self):
+    def test_apply_install_windows_returns_only_after_worker_is_ready(self):
         with tempfile.TemporaryDirectory() as tmp:
             payload = Path(tmp) / "payload"
             payload.mkdir()
             (payload / "JinshujuDesktop.exe").write_bytes(b"exe")
+            old = Path(tmp) / "JinshujuDesktop"
+            old.mkdir()
             plan = {"mode": "windows-dir", "target_path": str(Path(tmp) / "old"),
                     "backup_path": str(Path(tmp) / "old.backup-1.0.3"),
-                    "staged_path": str(Path(tmp) / "staged"),
-                    "script_path": str(Path(tmp) / "upgrades" / "switch.cmd"),
-                    "payload_dir": str(payload), "launch_path": "",
+                    "updates_root": str(Path(tmp) / "updates"),
+                    "payload_dir": str(payload),
                     "version": "1.3.0"}
-            launched = []
-            result = installer.apply_install(plan, relaunch=True,
-                                             runner=lambda *a, **k: launched.append(a[0]))
+
+            def spawn(args, **kwargs):
+                self.assertTrue(args[0].endswith("powershell.exe"))
+                self.assertEqual(args[-1], "0")  # 安装后不启动程序
+                script = Path(args[args.index("-File") + 1])
+                self.assertTrue(script.is_file())
+                (script.parent / "ready").touch()
+                return object()
+
+            result = installer.apply_install(plan, relaunch=False, runner=spawn)
             self.assertTrue(result["ok"])
-            text = Path(plan["script_path"]).read_text(encoding="utf-8")
-            self.assertIn("tasklist", text)
-            self.assertIn("move /Y", text)
-            self.assertIn("JinshujuDesktop.exe", text)
-            self.assertTrue(Path(plan["staged_path"], "JinshujuDesktop.exe").is_file())
-            self.assertTrue(launched)
+            self.assertTrue(result["pending"])
+            self.assertFalse(result["launched"])
+            self.assertTrue(Path(result["staged"], "JinshujuDesktop.exe").is_file())
+
+    def test_windows_failed_worker_keeps_current_install(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old, pkg = root / "JinshujuDesktop", root / "payload"
+            for path in (old, pkg):
+                path.mkdir()
+                (path / "JinshujuDesktop.exe").write_bytes(path.name.encode())
+            ctx = fake_ctx("windows-dir", system="windows",
+                           target="windows-x86_64", data_dir=str(root / "user-data"))
+            ctx["install_root"] = str(old)
+            plan = installer.plan_install(ctx, {"payload_dir": str(pkg),
+                                                "launch_path": str(pkg / "JinshujuDesktop.exe")},
+                                          "1.3.0")
+            with self.assertRaises(InstallError):
+                installer.apply_install(plan, runner=lambda *a, **k: None)
+            self.assertEqual((old / "JinshujuDesktop.exe").read_bytes(), b"JinshujuDesktop")
+            self.assertEqual(list(root.glob("JinshujuDesktop.new-*")), [])
 
     def test_apply_install_staged_copies_new_version(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -482,14 +549,6 @@ class InstallerTest(unittest.TestCase):
                                              runner=lambda *a, **k: None)
             self.assertTrue(result["ok"])
             self.assertTrue((dest / "Contents" / "APP_VERSION.txt").is_file())
-
-    def test_windows_script_contains_rollback(self):
-        plan = {"target_path": "C:/old", "staged_path": "C:/new",
-                "backup_path": "C:/backup"}
-        text = installer._windows_script(plan, 4242)
-        self.assertIn("4242", text)
-        self.assertIn('move /Y "%BACKUP%" "%OLD%"', text)
-
 
 class EndToEndUpdateTest(unittest.TestCase):
     """本地 HTTP 服务器模拟 Release：真实走完检查→下载→校验→解包→切换。"""
@@ -630,6 +689,10 @@ class EndToEndUpdateTest(unittest.TestCase):
                          "合成发布包为 macOS .app 结构")
     def test_legacy_helper_full_upgrade_against_local_release(self):
         helper = ROOT / "tools" / "upgrade_legacy.py"
+        target = mf.platform_target()
+        package = synthetic_package_bytes(target=target)
+        self._fill(package, hashlib.sha256(package).hexdigest())
+        self.addCleanup(self._fill, self.package, self.digest)
         with tempfile.TemporaryDirectory() as tmp:
             env = {"JSJ_DATA_DIR": str(Path(tmp) / "data")}
             proc = run_py(
@@ -643,6 +706,59 @@ class EndToEndUpdateTest(unittest.TestCase):
                       "JinshujuDesktop.app" / "Contents" / "APP_VERSION.txt")
             self.assertTrue(marker.is_file())
             self.assertIn("1.3.0", marker.read_text(encoding="utf-8"))
+
+    @unittest.skipUnless(sys.platform in ("darwin", "win32"), "需要官方发布目标")
+    def test_legacy_helper_can_repair_the_existing_release_without_a_version_bump(self):
+        target = mf.platform_target()
+        package = synthetic_package_bytes(target=target)
+        self._fill(package, hashlib.sha256(package).hexdigest())
+        self.addCleanup(self._fill, self.package, self.digest)
+        helper = ROOT / "tools" / "upgrade_legacy.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old = root / ("JinshujuDesktop.app" if sys.platform == "darwin"
+                          else "JinshujuDesktop")
+            old.mkdir()
+            (old / "APP_VERSION.txt").write_text("1.3.0\n")
+            (old / "original").write_text("release build")
+            if sys.platform == "win32":
+                (old / "JinshujuDesktop.exe").write_text("original executable")
+            data_dir = root / "user-data"
+            data_dir.mkdir()
+            data = data_dir / "profiles.json"
+            data.write_text("{}")
+            args = [sys.executable, str(helper), "--app", str(old),
+                    "--no-relaunch", "--manifest-url", self.base + "latest.json"]
+            env = {"JSJ_DATA_DIR": str(data_dir)}
+            unchanged = run_py([*args, "--upgrade"], env=env)
+            self.assertEqual(unchanged.returncode, 0, unchanged.stdout + unchanged.stderr)
+            self.assertTrue((old / "original").exists())
+
+            repaired = run_py([*args, "--repair"], env=env)
+            self.assertEqual(repaired.returncode, 0, repaired.stdout + repaired.stderr)
+            self.assertFalse((old / "original").exists())
+            self.assertTrue((Path(str(old) + ".backup-1.3.0") / "original").exists())
+            self.assertEqual(data.read_text(), "{}")
+
+    @unittest.skipUnless(sys.platform in ("darwin", "win32"), "需要官方发布目标")
+    def test_repair_never_installs_a_checksum_mismatch(self):
+        package = synthetic_package_bytes(target=mf.platform_target())
+        self._fill(package, "0" * 64)
+        self.addCleanup(self._fill, self.package, self.digest)
+        with tempfile.TemporaryDirectory() as tmp:
+            old = Path(tmp) / ("JinshujuDesktop.app" if sys.platform == "darwin"
+                               else "JinshujuDesktop")
+            old.mkdir()
+            (old / "APP_VERSION.txt").write_text("1.3.0\n")
+            if sys.platform == "win32":
+                (old / "JinshujuDesktop.exe").write_text("original executable")
+            proc = run_py([sys.executable, str(ROOT / "tools/upgrade_legacy.py"),
+                           "--repair", "--app", str(old), "--no-relaunch",
+                           "--manifest-url", self.base + "latest.json"],
+                          env={"JSJ_DATA_DIR": str(Path(tmp) / "user-data")})
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+            self.assertIn("SHA256 校验失败", proc.stderr)
+            self.assertEqual((old / "APP_VERSION.txt").read_text(), "1.3.0\n")
 
 
 class ReleaseConfigTest(unittest.TestCase):
@@ -682,7 +798,7 @@ class ReleaseConfigTest(unittest.TestCase):
                        "check_update_channel.py --offline",
                        "release-assets/latest.json",
                        "JinshujuDesktop-Upgrade-Helper.py",
-                       "Verify release tag matches package version"):
+                       "Resolve package version", "--clobber"):
             self.assertIn(needle, text)
 
     def test_ci_validates_update_channel(self):

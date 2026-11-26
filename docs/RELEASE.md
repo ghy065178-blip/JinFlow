@@ -69,7 +69,7 @@ python packaging/build.py --target windows-x86_64 --version 1.3.0
 
 ### `release.yml`（推送 `v*` 标签）
 
-四个原生 runner 各自构建 → 上传 artifact → `release` job 汇总生成 `SHA256SUMS.txt`，用 `softprops/action-gh-release@v2` 创建 Release 并附上四个包。
+四个原生 runner 各自构建 → 上传 artifact → `release` job 汇总生成 `SHA256SUMS.txt`，用 GitHub CLI 创建或更新对应 Release，并通过 `--clobber` 覆盖同名安装包、清单与校验文件。构建参数 `--version` 取自当前标签，因此可以在不创建新版本号的情况下回补历史标签的安装包。
 
 ```bash
 git tag -a v1.0.0 -m "1.0.0"
@@ -147,7 +147,7 @@ git push origin v1.0.0
 
 ## 9. 应用内更新发布配置（1.3.0）
 
-发布 `v1.3.0` 时，`release.yml` 在四个原生 runner 构建完成、汇总校验和后：
+发布任一现有 `v1.x` 标签时，`release.yml` 在四个原生 runner 构建完成、汇总校验和后：
 
 1. `tools/generate_update_manifest.py --checksums release-assets/SHA256SUMS.txt
    --output release-assets/latest.json`：把 4 个 zip + 2 个 dmg 的真实 SHA256
@@ -156,9 +156,9 @@ git push origin v1.0.0
    资产、历史版本升级路径与校验和覆盖。
 3. 复制 `tools/upgrade_legacy.py` 为
    `release-assets/JinshujuDesktop-Upgrade-Helper.py`，随 Release 上传。
-4. `softprops/action-gh-release@v2` 上传 `latest.json`、`SHA256SUMS.txt`、
-   六个平台包与升级助手；`https://github.com/.../releases/latest/download/latest.json`
-   随即成为可访问的更新通道。
+4. GitHub CLI 创建或更新对应 Release，并用 `--clobber` 覆盖 `latest.json`、
+   `SHA256SUMS.txt`、六个平台包与升级助手；
+   `https://github.com/.../releases/latest/download/latest.json` 随即成为可访问的更新通道。
 
 ```bash
 python tools/check_update_channel.py --offline

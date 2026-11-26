@@ -11,6 +11,7 @@
     python JinshujuDesktop-Upgrade-Helper.py --upgrade
     python JinshujuDesktop-Upgrade-Helper.py --upgrade --app "/Applications/JinshujuDesktop.app"
     python JinshujuDesktop-Upgrade-Helper.py --upgrade --no-relaunch
+    python JinshujuDesktop-Upgrade-Helper.py --repair --app "C:\\Apps\\JinshujuDesktop"
 
 脚本与桌面版共用同一份 update/latest.json 清单与 SHA256SUMS.txt；不读取、
 不上传、不修改任何报名信息或个人档案文件。
@@ -74,7 +75,7 @@ def fetch(url, timeout=20):
         return resp.read()
 
 
-def load_manifest(override=""):
+def load_manifest(override="", require_online=False):
     urls = ([override] if override else []) + [RAW_MANIFEST, LATEST_ASSET]
     errors = []
     for url in urls:
@@ -90,7 +91,7 @@ def load_manifest(override=""):
     local = Path(__file__).resolve().parent / "update" / "latest.json"
     if not local.is_file():
         local = Path(__file__).resolve().parents[1] / "update" / "latest.json"
-    if local.is_file():
+    if local.is_file() and not require_online:
         print("提示：在线更新通道不可用，使用随附清单（仅显示信息）。")
         return json.loads(local.read_text(encoding="utf-8"))
     raise ValueError("无法读取更新清单：" + "；".join(errors[:3]))
@@ -105,7 +106,7 @@ def detect_version(app_path):
         p = root / rel
         if p.is_file():
             m = VERSION_RE.search(p.read_text(encoding="utf-8", errors="replace")
-                                  .splitlines()[0])
+                                  .split("\n", 1)[0])
             if m:
                 return m.group(1)
     return ""
@@ -114,8 +115,8 @@ def detect_version(app_path):
 def asset_info(manifest, target):
     entry = (manifest.get("assets") or {}).get(target) or {}
     name = entry.get("zip")
-    if not name:
-        raise ValueError("最新版本没有 %s 平台的安装包" % target)
+    if name != "%s-%s.zip" % (APP, target):
+        raise ValueError("最新版本没有可用的 %s 安装包" % target)
     base = str(manifest.get("download_base")
                or (REPO + "/releases/download/%s/" % manifest.get("tag", "v1.3.0")))
     return name, base.rstrip("/") + "/" + name, str(entry.get("sha256") or "")
@@ -193,26 +194,38 @@ def verify_package(root, target, version):
     else:
         payload = root / APP
         launch = payload / (APP + ".exe")
-    marker = ""
-    for p in (payload / "APP_VERSION.txt", payload / "Contents" / "APP_VERSION.txt",
-              payload / "Contents" / "Resources" / "APP_VERSION.txt",
-              root / "APP_VERSION.txt", root / "BUILD_INFO.txt",
-              root / APP / "BUILD_INFO.txt"):
-        if p.is_file():
-            m = VERSION_RE.search(p.read_text(encoding="utf-8", errors="replace")
-                                  .splitlines()[0])
-            if m:
-                marker = m.group(1)
-                break
-    if marker and vkey(marker) != vkey(version):
+    marker = detect_version(payload) or detect_version(root)
+    if not marker or vkey(marker) != vkey(version):
         raise ValueError("发布包版本不匹配：期望 %s，实际 %s" % (version, marker))
+    for info in (payload / "BUILD_INFO.txt", root / "BUILD_INFO.txt"):
+        if info.is_file():
+            platform_marker = re.search(r"^target\s*:\s*(\S+)",
+                                        info.read_text(encoding="utf-8"), re.M)
+            if not platform_marker or platform_marker.group(1) != target:
+                raise ValueError("发布包平台不匹配：期望 %s" % target)
+            break
+    else:
+        raise ValueError("发布包缺少平台标记 BUILD_INFO.txt")
     if not launch.is_file():
         raise ValueError("发布包缺少可执行文件，可能下载不完整")
     return payload, launch
 
 
+def _launch(exe, target):
+    if target.startswith("macos"):
+        subprocess.run(["open", "-n", str(exe.parents[2])], check=True)
+    else:
+        app = subprocess.Popen([str(exe)], cwd=str(exe.parent))
+        try:
+            status = app.wait(timeout=1.5)
+        except subprocess.TimeoutExpired:
+            return
+        if status:
+            raise OSError("新程序启动失败（退出码 %s）。" % status)
+
+
 def switch(payload, launch, target, version, app_path, no_relaunch):
-    """切换到新版本：优先原位替换旧安装，否则落到数据目录并直接启动。"""
+    """优先原位替换旧安装，否则在数据目录中安装并启动。"""
     home = Path.home()
     override = os.environ.get("JSJ_DATA_DIR", "").strip()
     if override:
@@ -224,88 +237,89 @@ def switch(payload, launch, target, version, app_path, no_relaunch):
     else:
         data_root = Path(os.environ.get("XDG_DATA_HOME")
                          or str(home / ".local" / "share")) / "jinshuju-desktop"
+    rel = launch.relative_to(payload)
+    if app_path:
+        old = Path(app_path).resolve()
+        if data_root.resolve().is_relative_to(old):
+            raise ValueError("报名数据目录位于旧程序目录内。请另选位置安装新版。")
+        version_before = detect_version(old) or "old"
+        backup = old.with_name(old.name + ".backup-" + version_before)
+        suffix = 2
+        while backup.exists():
+            backup = old.with_name(old.name + ".backup-" + version_before + "-%d" % suffix)
+            suffix += 1
+        with tempfile.TemporaryDirectory(prefix=old.name + ".new-", dir=old.parent) as tmp:
+            staged = Path(tmp) / old.name
+            shutil.copytree(payload, staged, symlinks=True)
+            try:
+                old.rename(backup)
+            except OSError as exc:
+                raise OSError("无法备份原安装。请关闭所有使用该目录的程序，"
+                              "并检查写入权限：%s" % exc) from exc
+            moved_new = False
+            try:
+                staged.rename(old)
+                moved_new = True
+                if target.startswith("macos"):
+                    subprocess.run(["codesign", "--force", "--deep", "--sign", "-",
+                                    str(old)], check=False, stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL)
+                    subprocess.run(["xattr", "-dr", "com.apple.quarantine", str(old)],
+                                   check=False, stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL)
+                if not no_relaunch:
+                    _launch(old / rel, target)
+            except Exception:
+                try:
+                    if moved_new:
+                        old.rename(staged)
+                    backup.rename(old)
+                except OSError as exc:
+                    raise OSError("恢复安装失败。原程序备份位于 %s：%s" %
+                                  (backup, exc)) from exc
+                raise
+        print("旧版本已备份：%s" % backup)
+        return str(old)
+
     leaf = (APP + ".app") if target.startswith("macos") else APP
     dest_root = data_root / "updates" / version / leaf
-    if dest_root.exists():
-        shutil.rmtree(str(dest_root))
     dest_root.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(str(payload), str(dest_root), symlinks=True)
-    rel = launch.relative_to(payload)
-    new_launch = dest_root / rel
-
-    final_launch = new_launch
-    if app_path:
-        old = Path(app_path)
-        if old.exists():
-            backup = old.with_name(old.name + ".backup-" + version)
-            suffix = 2
-            while backup.exists():
-                backup = old.with_name(old.name + ".backup-" + version + "-%d" % suffix)
-                suffix += 1
-            if sys.platform == "darwin" and old.name.endswith(".app"):
-                shutil.move(str(old), str(backup))
-                shutil.move(str(dest_root), str(old))
-                subprocess.run(["codesign", "--force", "--deep", "--sign", "-",
-                                str(old)], check=False, stdout=subprocess.DEVNULL,
-                               stderr=subprocess.DEVNULL)
-                subprocess.run(["xattr", "-dr", "com.apple.quarantine", str(old)],
-                               check=False, stdout=subprocess.DEVNULL,
-                               stderr=subprocess.DEVNULL)
-                final_launch = old / rel
-                print("旧版本已备份：%s" % backup)
-            elif sys.platform == "win32" and old.is_dir():
-                # 旧版 exe 可能仍在运行：暂存新目录并写一个退出后替换的脚本
-                staged = old.parent / (APP + "-" + version)
-                if staged.exists():
-                    shutil.rmtree(str(staged))
-                shutil.copytree(str(dest_root), str(staged), symlinks=True)
-                script = data_root / "upgrades" / ("switch-%s.cmd" % version)
-                script.parent.mkdir(parents=True, exist_ok=True)
-                script.write_text("\r\n".join([
-                    "@echo off",
-                    "setlocal",
-                    'set "OLD=%s"' % old,
-                    'set "NEW=%s"' % staged,
-                    'set "BACKUP=%s"' % backup,
-                    ":wait",
-                    'tasklist /FI "IMAGENAME eq %s.exe" /NH 2>nul | find /I "%s.exe" >nul'
-                    % (APP, APP),
-                    "if not errorlevel 1 ( timeout /t 1 /nobreak >nul & goto wait )",
-                    'if exist "%OLD%" move /Y "%OLD%" "%BACKUP%" >nul',
-                    'move /Y "%NEW%" "%OLD%" >nul',
-                    'start "" "%OLD%\\%s.exe"' % APP,
-                    "exit /b 0", "",
-                ]), encoding="utf-8")
-                print("已生成后台替换脚本：%s" % script)
-                if not no_relaunch:
-                    subprocess.Popen(["cmd.exe", "/c", str(script)],
-                                    creationflags=0x00000008 | 0x00000200,
-                                    stdin=subprocess.DEVNULL,
-                                    stdout=subprocess.DEVNULL,
-                                    stderr=subprocess.DEVNULL)
-                return str(old), str(script)
+    if dest_root.exists():
+        dest_root = Path(tempfile.mkdtemp(prefix="install-", dir=dest_root.parent)) / leaf
+    shutil.copytree(payload, dest_root, symlinks=True)
     if not no_relaunch:
-        if sys.platform == "darwin" and str(final_launch).endswith("/Contents/MacOS/" + APP):
-            subprocess.Popen(["open", "-n", str(final_launch.parents[2])])
-        elif final_launch.is_file():
-            subprocess.Popen([str(final_launch)])
-    return str(dest_root), ""
+        _launch(dest_root / rel, target)
+    return str(dest_root)
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="1.0.x → 1.3.0 独立升级助手")
-    ap.add_argument("--check", action="store_true", help="只检查版本，不下载")
-    ap.add_argument("--upgrade", action="store_true", help="下载校验并切换到新版")
+    ap = argparse.ArgumentParser(description="独立升级与修复助手")
+    modes = ap.add_mutually_exclusive_group()
+    modes.add_argument("--check", action="store_true", help="只检查版本，不下载")
+    modes.add_argument("--upgrade", action="store_true", help="下载校验并切换到新版")
+    modes.add_argument("--repair", action="store_true",
+                       help="关闭应用后重新安装当前发布版本，须指定 --app")
     ap.add_argument("--app", default="", help="旧版本安装路径（可选，用于原位替换）")
     ap.add_argument("--current-version", default="", help="显式指定当前旧版本号")
     ap.add_argument("--manifest-url", default="", help="覆盖更新清单地址")
     ap.add_argument("--no-relaunch", action="store_true", help="不自动启动新版本")
     args = ap.parse_args(argv)
-    if not args.check and not args.upgrade:
+    if not args.upgrade and not args.repair:
         args.check = True
+    if args.repair and not args.app:
+        ap.error("--repair 需要 --app 指定当前安装目录。请先关闭程序。")
 
     try:
-        manifest = load_manifest(args.manifest_url)
+        if args.app:
+            old = Path(args.app).expanduser().resolve()
+            if sys.platform == "win32" and old.name.lower() == (APP + ".exe").lower():
+                old = old.parent
+            if not old.is_dir() or (sys.platform == "win32" and
+                                     not (old / (APP + ".exe")).is_file()) or (
+                    sys.platform == "darwin" and old.suffix != ".app"):
+                raise ValueError("找不到指定的旧版程序：%s" % old)
+            args.app = str(old)
+        manifest = load_manifest(args.manifest_url, require_online=not args.check)
         latest = str(manifest["latest_version"])
         minimum = str(manifest.get("min_supported_version") or "1.0.0")
         legacy = list(manifest.get("legacy_versions") or [])
@@ -327,13 +341,18 @@ def main(argv=None):
     print("手动下载   : %s" % RELEASE_PAGE)
     if vkey(current) < vkey(minimum):
         return fail("当前版本 %s 低于可升级下限 %s" % (current, minimum))
-    if vkey(current) >= vkey(latest):
+    if vkey(current) > vkey(latest) and args.repair:
+        return fail("当前版本 %s 高于发布版本 %s，不能修复为更早版本。" % (current, latest))
+    if vkey(current) >= vkey(latest) and not args.repair:
         print("结论       : 当前已是最新版本，无需升级。")
         return 0
     if legacy and current not in legacy and vkey(current) < vkey(minimum):
         return fail("当前版本不在兼容列表中")
-    print("结论       : 可从 %s 直接升级到 %s（报名数据保持原样）。"
-          % (current, latest))
+    if args.repair and vkey(current) == vkey(latest):
+        print("结论       : 可重新安装当前发布版本 %s。" % latest)
+    else:
+        print("结论       : 可从 %s 直接升级到 %s（报名数据保持原样）。"
+              % (current, latest))
     if args.check:
         print("下载地址   : %s" % (url or "（当前平台无对应安装包，请手动下载）"))
         return 0
@@ -360,12 +379,9 @@ def main(argv=None):
         print("SHA256 校验通过：%s" % expected)
         root = extract(archive, work / "package")
         payload, launch = verify_package(root, target, latest)
-        installed, script = switch(payload, launch, target, latest,
-                                   args.app, args.no_relaunch)
+        installed = switch(payload, launch, target, latest, args.app, args.no_relaunch)
         print("\n升级完成：已切换到 v%s" % latest)
         print("安装位置   : %s" % installed)
-        if script:
-            print("替换脚本   : %s（关闭旧版后自动完成）" % script)
         print("本机报名信息、档案与任务配置均未改动。")
         print("完成时间   : %s" % datetime.now().isoformat(timespec="seconds"))
         return 0

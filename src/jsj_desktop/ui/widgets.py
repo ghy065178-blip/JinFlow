@@ -3,9 +3,8 @@
 import re
 import tkinter as tk
 from tkinter import ttk
-from tkinter.scrolledtext import ScrolledText
 
-from .theme import LEVEL_COLORS, PALETTE, font_family
+from .theme import LEVEL_COLORS, PALETTE
 
 
 class ScrollableFrame(ttk.Frame):
@@ -32,7 +31,7 @@ class ScrollableFrame(ttk.Frame):
                                 highlightthickness=0, borderwidth=0)
         self.vsb = ttk.Scrollbar(self, orient="vertical",
                                  command=self.canvas.yview)
-        self.body = ttk.Frame(self.canvas, style="Card.TFrame")
+        self.body = ttk.Frame(self.canvas)
         self._win = self.canvas.create_window((0, 0), window=self.body,
                                               anchor="nw")
         self.canvas.configure(yscrollcommand=self.vsb.set)
@@ -126,7 +125,7 @@ class ScrollableFrame(ttk.Frame):
 
 class StatusCard(ttk.Frame):
     def __init__(self, parent, key, note=""):
-        super().__init__(parent, style="Card.TFrame", padding=(12, 10))
+        super().__init__(parent, style="Glass.TFrame", padding=(12, 10))
         ttk.Label(self, text=key, style="Key.TLabel").pack(anchor="w")
         self.value = ttk.Label(self, text="--", style="Value.TLabel")
         self.value.pack(anchor="w", pady=(3, 0))
@@ -144,19 +143,20 @@ class StatusCard(ttk.Frame):
             self._color = color
 
 
-class LogView(ScrolledText):
+class LogView(tk.Text):
     LEVELS = list(LEVEL_COLORS.keys())
 
     def __init__(self, parent, **kwargs):
-        super().__init__(parent, wrap="word", background=PALETTE["log_bg"],
-                         foreground=PALETTE["log_text"],
-                         insertbackground=PALETTE["log_text"],
-                         borderwidth=0, font=("Consolas", 10), height=18,
-                         **kwargs)
-        self.configure(state="disabled")
-        for level, color in LEVEL_COLORS.items():
-            self.tag_configure("lv-" + level, foreground=color)
-        self.tag_configure("ts", foreground=PALETTE["log_ts"])
+        self.frame = ttk.Frame(parent)
+        super().__init__(self.frame, wrap="word", state="disabled", borderwidth=0,
+                         highlightthickness=0, font="TkFixedFont", height=18,
+                         padx=13, pady=10, **kwargs)
+        scrollbar = ttk.Scrollbar(self.frame, command=self.yview,
+                                  style="Log.Vertical.TScrollbar")
+        self.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        self.pack(side="left", fill="both", expand=True)
+        self.retheme()
         self._lines = []
 
     def retheme(self):

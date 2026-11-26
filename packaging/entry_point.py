@@ -9,7 +9,9 @@ macOS 的 Python/OpenSSL 不读取系统钥匙串，冻结后又找不到构建�
 certs/cacert.pem 打进包，这里在冻结 + macOS 下显式指向它。
 """
 import os
+import re
 import sys
+from pathlib import Path
 
 if not getattr(sys, "frozen", False):
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -43,7 +45,32 @@ def _ensure_ca_bundle():
         os.environ.setdefault("SSL_CERT_FILE", bundle)
 
 
+def _ensure_runtime_version():
+    """让冻结包的界面和更新器读取本次构建的版本标记。"""
+    if not getattr(sys, "frozen", False):
+        return
+    candidates = []
+    base = getattr(sys, "_MEIPASS", None)
+    if base:
+        candidates.append(Path(base) / "APP_VERSION.txt")
+    executable = Path(sys.executable).resolve()
+    candidates += [
+        executable.parent / "APP_VERSION.txt",
+        executable.parent.parent / "Resources" / "APP_VERSION.txt",
+    ]
+    for marker in candidates:
+        try:
+            text = marker.read_text(encoding="utf-8").splitlines()[0]
+        except (OSError, UnicodeError, IndexError):
+            continue
+        match = re.search(r"\b(\d+\.\d+\.\d+(?:\.\d+)?)\b", text)
+        if match:
+            os.environ["JSJ_RUNTIME_VERSION"] = match.group(1)
+            return
+
+
 _ensure_ca_bundle()
+_ensure_runtime_version()
 
 from jsj_desktop.app import main  # noqa: E402
 

@@ -16,7 +16,7 @@
 | 自动应答缺项 | 开 | 任务控制台 |
 | 日志脱敏显示 | 关 | 实时日志 / `settings.json` |
 | 界面主题 | 跟随系统 | 「设置与关于」/ `settings.json` 的 `theme_mode` |
-| 启动时自动检查更新 | 关 | 「设置与关于」/ `settings.json` 的 `check_update_on_startup`（1.2.0） |
+| 启动时自动检查更新 | 开 | 「设置与关于」/ `settings.json` 的 `check_update_on_startup`（1.2.0） |
 | 最新版本 / 升级目标 | `1.3.0` | `update/latest.json`（只读发布通道） |
 | 北京时间时区 | `Asia/Shanghai`（缺少时区库时 UTC+8） | `core/constants.py` |
 | User-Agent | 与旧脚本一致 | `core/constants.py` |
@@ -97,13 +97,13 @@ Linux   : $XDG_DATA_HOME/jinshuju-desktop/ 或 ~/.local/share/jinshuju-desktop/
   "auto_scroll": true,
   "auto_reply": true,
   "theme_mode": "system",
-  "check_update_on_startup": false,
+  "check_update_on_startup": true,
   "tasks": [{"id": "t1", "name": "任务 1", "profile_id": "p1"}]
 }
 ```
 
-- `check_update_on_startup` 默认 `false`（1.2.0 新增）；旧版 `settings.json`
-  缺少该键时按 `false` 处理，格式完全向后兼容。
+- `check_update_on_startup` 缺省为 `true`。旧版 `settings.json` 中明确设为 `false`
+  的用户继续关闭启动检查。
 - `theme_mode` 可取 `dark`、`light`、`system`，默认 `system`；旧版配置缺少该键时自动跟随系统。
 
 ## 5. 提交数据格式（业务结果不变）

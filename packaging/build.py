@@ -9,6 +9,7 @@
 import argparse
 import hashlib
 import os
+import plistlib
 import shutil
 import subprocess
 import sys
@@ -184,6 +185,8 @@ def build_frozen(target, out_root, version):
     sep = ";" if os.name == "nt" else ":"
     ca_bundle = locate_ca_bundle()
     print("随包 CA 根证书：%s" % ca_bundle)
+    version_marker = work / "APP_VERSION.txt"
+    version_marker.write_text("%s %s\n" % (APP, version), encoding="utf-8")
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--noconfirm", "--clean", "--onedir", "--windowed",
@@ -201,6 +204,7 @@ def build_frozen(target, out_root, version):
         # 1.3.0：随包内置更新清单，在线通道全部不可用时可显示版本信息
         "--add-data", "%s%supdate" %
         (str(ROOT / "update" / "latest.json"), sep),
+        "--add-data", "%s%s." % (str(version_marker), sep),
     ]
     if target.startswith("macos"):
         cmd += ["--osx-bundle-identifier", "cn.jinshuju.desktop"]
@@ -215,6 +219,17 @@ def build_frozen(target, out_root, version):
     cmd.append(str(ROOT / "packaging" / "entry_point.py"))
     run(cmd, cwd=str(ROOT))
     return raw
+
+
+def set_macos_bundle_version(app_bundle, version):
+    """写入 Finder / LaunchServices 使用的 macOS 版本字段。"""
+    info = Path(app_bundle) / "Contents" / "Info.plist"
+    with info.open("rb") as fp:
+        data = plistlib.load(fp)
+    data["CFBundleShortVersionString"] = str(version)
+    data["CFBundleVersion"] = str(version)
+    with info.open("wb") as fp:
+        plistlib.dump(data, fp, fmt=plistlib.FMT_XML, sort_keys=False)
 
 
 def locate_app(raw):
@@ -246,6 +261,7 @@ def stage_and_pack(target, out_root, version, sign_identity):
     if is_bundle:
         dest = stage / (APP + ".app")
         shutil.copytree(source, dest, symlinks=True)
+        set_macos_bundle_version(dest, version)
         # 版本标记写在签名之前，并放在 Contents/Resources（由 CodeResources
         # 封签）。放在 Contents 根目录会被 codesign --verify --deep --strict
         # 判定为「code object is not signed at all」，导致 DMG 校验失败。

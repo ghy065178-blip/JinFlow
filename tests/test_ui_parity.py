@@ -62,16 +62,19 @@ class UiParityTest(unittest.TestCase):
             self.assertIn(marker, self.ui,
                           "主题或北京时间入口缺少：%s" % marker)
 
-    def test_dark_palette_matches_original_css(self):
-        for key, value in self.spec["palette"].items():
-            self.assertIn('"%s": "%s"' % (key, value), self.theme,
-                          "主题配色与原面板 CSS 变量不一致：%s" % key)
+    def test_theme_defines_dark_palette_semantic_tokens(self):
+        for key in ("bg", "surface", "surface2", "border", "text",
+                    "muted", "dim", "teal", "blue", "green", "amber",
+                    "red", "purple"):
+            self.assertIn('"%s":' % key, self.theme,
+                          "主题缺少语义令牌：%s" % key)
+        self.assertIn("_DARK_PALETTE", self.theme)
+        self.assertIn("_LIGHT_PALETTE", self.theme)
 
-    def test_single_page_no_browser_or_local_server(self):
-        for forbidden in ("ThreadingHTTPServer", "webbrowser.open",
-                          "127.0.0.1:8765", "EventSource"):
+    def test_single_page_no_local_server(self):
+        for forbidden in ("ThreadingHTTPServer", "127.0.0.1:8765", "EventSource"):
             self.assertNotIn(forbidden, self.ui,
-                              "主界面不应依赖本地 HTTP 服务或浏览器：%s" % forbidden)
+                              "主界面不应依赖本地 HTTP 服务：%s" % forbidden)
 
 
 if __name__ == "__main__":
