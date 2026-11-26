@@ -57,6 +57,9 @@ RELEASE_NOTES_MACOS = """JinshujuDesktop · macOS 首次运行必读
 网络 / 证书诊断（只读，不会提交任何数据）：
    /Applications/JinshujuDesktop.app/Contents/MacOS/JinshujuDesktop --check-tls
 
+检查更新：菜单「帮助 → 检查更新与升级…」可查看当前/最新版本并一键升级；
+升级只替换程序文件，不改动本机报名信息与档案；失败会提示原因并保留当前版本。
+
 所有报名信息与多人档案只保存在本机用户数据目录，本包不含任何个人信息。
 首次运行请在左侧「运行配置」填写本次表单链接。
 详见仓库 README.md / docs/USER_GUIDE.md / docs/RELEASE.md。
@@ -66,6 +69,7 @@ RELEASE_NOTES_WINDOWS = """双击 JinshujuDesktop/%s.exe 启动；建议先解�
 首次运行请在左侧「运行配置」填写本次表单链接。
 所有报名信息与多人档案只保存在本机用户数据目录，本包不含任何个人信息。
 若出现 SmartScreen 提示，点「更多信息 → 仍要运行」。
+检查更新：菜单「帮助 → 检查更新与升级…」，升级失败会提示原因并保留当前版本。
 详见仓库 README.md / docs/USER_GUIDE.md / docs/RELEASE.md。
 """ % APP
 
@@ -108,6 +112,16 @@ def verify_ca_in_archive(archive):
         names = zf.namelist()
     if not any(name.endswith("certs/cacert.pem") for name in names):
         raise SystemExit("发布包缺少 certs/cacert.pem，macOS 端 HTTPS 会失败")
+
+
+def verify_manifest_in_archive(archive):
+    """确保冻结包带有随包更新清单（全部在线通道失败时的只读兜底）。"""
+    with zipfile.ZipFile(archive) as zf:
+        names = zf.namelist()
+    if not any(name.endswith("update/latest.json") for name in names):
+        raise SystemExit("发布包缺少 update/latest.json，应用内更新无法离线兜底")
+    if not any(name.endswith("APP_VERSION.txt") for name in names):
+        raise SystemExit("发布包缺少 APP_VERSION.txt，升级后无法确认版本")
 
 
 def run(cmd, **kwargs):
@@ -184,6 +198,9 @@ def build_frozen(target, out_root, version):
         (str(ROOT / "tests" / "fixtures" / "sample_form.json"), sep),
         "--add-data", "%s%s." % (str(ROOT / "LICENSE"), sep),
         "--add-data", "%s%scerts" % (ca_bundle, sep),
+        # 1.2.0：随包内置更新清单，在线通道全部不可用时可显示版本信息
+        "--add-data", "%s%supdate" %
+        (str(ROOT / "update" / "latest.json"), sep),
     ]
     if target.startswith("macos"):
         cmd += ["--osx-bundle-identifier", "cn.jinshuju.desktop"]
@@ -229,6 +246,10 @@ def stage_and_pack(target, out_root, version, sign_identity):
     if is_bundle:
         dest = stage / (APP + ".app")
         shutil.copytree(source, dest, symlinks=True)
+        # 版本标记写在签名之前，保证 CodeResources 与最终 bundle 一致；
+        # 应用内升级用它确认安装后的实际版本，旧版检测也据此判断是否需要升级。
+        (dest / "Contents" / "APP_VERSION.txt").write_text(
+            "%s %s\n" % (APP, version), encoding="utf-8")
         if sign_identity:
             sign_macos(dest, sign_identity)
         elif sys.platform == "darwin":
@@ -240,6 +261,8 @@ def stage_and_pack(target, out_root, version, sign_identity):
     else:
         inner = stage / APP
         shutil.copytree(source, inner, symlinks=True)
+        (inner / "APP_VERSION.txt").write_text(
+            "%s %s\n" % (APP, version), encoding="utf-8")
 
     try:
         commit = subprocess.check_output(
@@ -254,6 +277,7 @@ def stage_and_pack(target, out_root, version, sign_identity):
         "built_at  : %s\n"
         "commit    : %s\n"
         "runtime   : Python standard library only (tkinter + urllib)\n"
+        "update    : in-app check + upgrade via help menu; channel v1.2.0\n"
         "data      : no bundled personal information; user data is created at runtime\n"
         % (APP, version, target, sys.version.split()[0], sys.platform,
            datetime.now().isoformat(timespec="seconds"), commit))
@@ -347,7 +371,8 @@ def main(argv=None):
     archive = stage_and_pack(target, out_root, args.version,
                              args.sign_identity)
     verify_ca_in_archive(archive)
-    print("发布包 CA 根证书检查 OK（certs/cacert.pem）")
+    verify_manifest_in_archive(archive)
+    print("发布包 CA 根证书与更新清单检查 OK")
 
     findings = check_no_pii.scan_artifact(archive)
     if findings:

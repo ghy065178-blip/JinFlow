@@ -46,6 +46,7 @@ jobs:
           python -m unittest discover -s tests -t . -v
           python tools/check_no_pii.py --strict
           python -m jsj_desktop --self-test
+          python tools/check_update_channel.py --offline
 
       - name: Build release package
         run: python packaging/build.py --target ${{ matrix.target }}
@@ -113,6 +114,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify release tag matches package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python -c "import os,sys; sys.path.insert(0,'src'); import jsj_desktop; t=os.environ['RELEASE_TAG'].lstrip('v'); assert t==jsj_desktop.__version__, 'tag '+t+' != '+jsj_desktop.__version__; print('tag', t, '== __version__')"
+
       - name: Download all packages
         uses: actions/download-artifact@v4
         with:
@@ -125,6 +133,18 @@ jobs:
           cd release-assets
           sha256sum JinshujuDesktop-*.zip JinshujuDesktop-*.dmg > SHA256SUMS.txt
           cat SHA256SUMS.txt
+
+      - name: Generate update manifest + legacy upgrade helper
+        run: |
+          set -e
+          python tools/generate_update_manifest.py \
+            --checksums release-assets/SHA256SUMS.txt \
+            --output release-assets/latest.json
+          python tools/check_update_channel.py --offline \
+            --checksums release-assets/SHA256SUMS.txt
+          cp tools/upgrade_legacy.py release-assets/JinshujuDesktop-Upgrade-Helper.py
+          echo "--- latest.json ---"
+          cat release-assets/latest.json
 
       - name: Create release
         uses: softprops/action-gh-release@v2
@@ -149,7 +169,21 @@ jobs:
             若仍被拦截：`xattr -dr com.apple.quarantine /Applications/JinshujuDesktop.app`。
             包为 ad-hoc 签名、未公证，系统提示属正常；Windows 未签名会出现 SmartScreen。
             详见各包内 `README-RELEASE.txt` 与 docs/RELEASE.md。
+
+            ## 应用内检查更新与升级
+
+            - 桌面版菜单「帮助 → 检查更新与升级…」显示当前版本 / 最新版本，
+              下载后用 `SHA256SUMS.txt` 校验，再自动安装并重启到新版本；
+              失败会给出具体原因并保留当前版本与报名数据。
+            - 更新通道资产 `latest.json` 随本 Release 发布，四平台包名与校验和齐全。
+            - 1.0.0 / 1.0.1 / 1.0.2 / 1.0.3 的用户若使用旧冻结包（无应用内更新代码），
+              请下载 `JinshujuDesktop-Upgrade-Helper.py` 后用本机 Python 运行一次：
+              `python JinshujuDesktop-Upgrade-Helper.py --upgrade`，
+              即可检测、校验并切换到 1.2.0；本机报名信息与档案保持不变。
+            - 也可直接下载对应平台的 1.2.0 安装包覆盖安装，数据目录通用。
           files: |
             release-assets/JinshujuDesktop-*.zip
             release-assets/JinshujuDesktop-*.dmg
             release-assets/SHA256SUMS.txt
+            release-assets/latest.json
+            release-assets/JinshujuDesktop-Upgrade-Helper.py

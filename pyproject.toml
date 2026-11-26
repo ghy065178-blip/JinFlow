@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jinshuju-registration-desktop"
-version = "1.0.3"
+version = "1.2.0"
 description = "金数据报名助手 · 跨平台桌面版（原生图形界面、多人档案、多开任务）"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -31,8 +31,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-org/jinshuju-registration-desktop"
-Issues = "https://github.com/your-org/jinshuju-registration-desktop/issues"
+Homepage = "https://github.com/ghy065178-blip/jinshuju-registration-desktop"
+Issues = "https://github.com/ghy065178-blip/jinshuju-registration-desktop/issues"
+Releases = "https://github.com/ghy065178-blip/jinshuju-registration-desktop/releases/latest"
+UpdateChannel = "https://raw.githubusercontent.com/ghy065178-blip/jinshuju-registration-desktop/master/update/latest.json"
 
 [project.gui-scripts]
 jsj-desktop = "jsj_desktop.app:main"

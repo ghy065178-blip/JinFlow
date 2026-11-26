@@ -50,6 +50,12 @@ jobs:
       - name: Headless logic self-test
         run: python -m jsj_desktop --self-test
 
+      - name: Update channel static validation (1.0.x → 1.2.0)
+        run: python tools/check_update_channel.py --offline
+
+      - name: Legacy upgrade helper syntax
+        run: python -m py_compile tools/upgrade_legacy.py
+
       - name: Tk availability (informational)
         continue-on-error: true
         run: python -c "import tkinter; print('Tk', tkinter.TkVersion)"

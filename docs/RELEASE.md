@@ -36,7 +36,7 @@
 ```bash
 python packaging/build.py                     # 自动识别当前系统/架构
 python packaging/build.py --target macos-arm64 --sign-identity "Developer ID Application: ..."
-python packaging/build.py --target windows-x86_64 --version 1.0.0
+python packaging/build.py --target windows-x86_64 --version 1.2.0
 ```
 
 `build.py` 会：
@@ -44,7 +44,9 @@ python packaging/build.py --target windows-x86_64 --version 1.0.0
 1. 校验 Python / tkinter / PyInstaller 与目标架构是否匹配；
 2. 调用 `pyinstaller --noconfirm --clean --onedir --windowed --name JinshujuDesktop`，
    macOS 附加 `--osx-bundle-identifier`，Windows 附加 `--version-file`；
-3. 把 `tests/fixtures/sample_form.json` 作为只读样例数据加入（供 `--self-test` 使用）；
+3. 把 `tests/fixtures/sample_form.json` 作为只读样例数据加入（供 `--self-test` 使用），
+   并把 `update/latest.json` 与 `APP_VERSION.txt` 版本标记打入包内（1.2.0 起，
+   打包后由 `verify_manifest_in_archive()` 强制校验）；
 4. 可选图标 `packaging/icons/app.icns`（macOS）/ `app.ico`（Windows）；缺失则使用系统默认图标；
 5. macOS 用 `ditto -c -k --keepParent` 保留 `.app` 内的符号链接，Windows 用 zip 打包 onedir；
 6. 写入 `BUILD_INFO.txt`（版本、系统、架构、Python、构建时间、Git commit）与 `SHA256SUMS.txt`；
@@ -107,7 +109,11 @@ git push origin v1.0.0
 
 - [ ] 包内**没有** `报名信息*.json`、`个人档案*.json`、`*.backup.json`、`panel_url.txt`、`*.log`、`多开任务/`；
 - [ ] `tools/check_no_pii.py --strict --artifact <归档>` 通过；
-- [ ] `BUILD_INFO.txt` 中的架构与包名一致；
+- [ ] `BUILD_INFO.txt` 中的架构与包名一致，且包含 `APP_VERSION.txt` 版本标记；
+- [ ] `update/latest.json` 的 `latest_version` / `upgrade_target` 与 `__version__` 一致，
+      `legacy_upgrade_paths` 覆盖 1.0.0～1.0.3；
+- [ ] `python tools/check_update_channel.py --offline --checksums dist/SHA256SUMS.txt` 通过；
+- [ ] Release 资产包含 `latest.json` 与 `JinshujuDesktop-Upgrade-Helper.py`；
 - [ ] `SHA256SUMS.txt` 已生成并随 Release 上传；
 - [ ] 在目标架构的机器上双击启动，确认无控制台窗口、单页面板与原控制面板一致、`--self-test` 可执行；
 - [ ] 首次启动后数据目录为空（没有预置任何档案）；
@@ -130,5 +136,37 @@ git push origin v1.0.0
 
 ## 8. 版本与变更
 
-- 版本号统一在 `src/jsj_desktop/__init__.py`（`__version__`）、`pyproject.toml`、`packaging/version_info.txt` 三处维护，发布前用 `tools/smoke_test.py` 与 CHANGELOG 核对。
-- 任何涉及 `core/` 业务逻辑的改动，都必须保证 `tests/test_legacy_parity.py` 与 `tests/test_mapping.py` 继续通过。
+- 当前版本 **1.2.0**。版本号统一在 `src/jsj_desktop/__init__.py`（`__version__`）、
+  `pyproject.toml`、`packaging/version_info.txt` 与 `update/latest.json`
+  （`latest_version` / `upgrade_target`）四处维护；发布前用
+  `tools/check_update_channel.py --offline`、`tools/smoke_test.py` 与 CHANGELOG 核对，
+  Release 工作流还会在打标签时校验 `refs/tags/v*` 与 `__version__` 一致。
+- 任何涉及 `core/` 业务逻辑的改动，都必须保证 `tests/test_legacy_parity.py` 与
+  `tests/test_mapping.py` 继续通过；1.2.0 只新增 `update/` 与界面附加入口，
+  未改动 `core/` 任何一行。
+
+## 9. 应用内更新发布配置（1.2.0）
+
+发布 `v1.2.0` 时，`release.yml` 在四个原生 runner 构建完成、汇总校验和后：
+
+1. `tools/generate_update_manifest.py --checksums release-assets/SHA256SUMS.txt
+   --output release-assets/latest.json`：把 4 个 zip + 2 个 dmg 的真实 SHA256
+   写入清单；缺少任一平台资产直接失败，避免发出不完整的更新通道。
+2. `tools/check_update_channel.py --offline --checksums ...`：再次核对版本、
+   资产、历史版本升级路径与校验和覆盖。
+3. 复制 `tools/upgrade_legacy.py` 为
+   `release-assets/JinshujuDesktop-Upgrade-Helper.py`，随 Release 上传。
+4. `softprops/action-gh-release@v2` 上传 `latest.json`、`SHA256SUMS.txt`、
+   六个平台包与升级助手；`https://github.com/.../releases/latest/download/latest.json`
+   随即成为可访问的更新通道。
+
+```bash
+python tools/check_update_channel.py --offline
+git tag -a v1.2.0 -m "1.2.0 应用内检查更新与升级"
+git push origin v1.2.0
+```
+
+验证「旧版本 → 1.2.0」：在 1.0.x 环境执行
+`python JinshujuDesktop-Upgrade-Helper.py --check --current-version 1.0.3`
+应显示可升级到 1.2.0；在 1.2.0 的「帮助 → 检查更新与升级…」应显示
+当前 1.2.0 / 最新 1.2.0。四平台自动化回归见 `tests/test_update.py`。

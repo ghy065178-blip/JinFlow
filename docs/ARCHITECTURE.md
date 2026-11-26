@@ -27,6 +27,36 @@
 └──────────────────────────────────────────────────────────────┘
 ```
 
+## 更新子系统（1.2.0，独立旁路）
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ ui/update_dialog.py（帮助菜单 → 检查更新与升级）              │
+│   后台线程执行，queue + after(100ms) 只由主线程刷新控件       │
+└───────────────┬──────────────────────────────────────────────┘
+                │ service.check_for_update / apply_update
+┌───────────────▼──────────────────────────────────────────────┐
+│ update/（纯标准库，无 GUI / 不参与 core 业务）                │
+│   version → manifest → client → installer → service           │
+│   版本兼容 / 多来源清单 / 下载校验 / 安装切换 / 异常与回滚     │
+└───────────────┬──────────────────────────────────────────────┘
+                │ HTTPS（仅用户主动触发）
+        GitHub 静态清单 / Releases API / SHA256SUMS.txt / 发布包
+```
+
+- 与 `core/` 完全解耦：不调用 `Endpoint`、不读写 `报名信息.json` / `profiles.json`，
+  不改变 `entryAttributes`、校时、等待与冲刺逻辑。
+- 更新通道：`update/latest.json`（权威）→ GitHub Releases API → Release 资产
+  `latest.json`，取版本号最高者；全部失败回退随包清单并禁止自动安装。
+- 安装前校验 `SHA256SUMS.txt`、包内 `APP_VERSION.txt` 与 `BUILD_INFO.txt` 的
+  版本 + 平台；macOS 备份旧 `.app` 后替换并重启，Windows 由独立 `.cmd` 在进程
+  退出后替换，源码运行切换到 `<数据目录>/updates/<版本>/`。
+- 历史版本 1.0.0～1.0.3 与本版本共用数据目录与配置格式；已冻结的旧包由
+  `tools/upgrade_legacy.py`（Release 资产 `JinshujuDesktop-Upgrade-Helper.py`）
+  作为一次性桥接。
+- 所有异常统一为 `UpdateError` 子类，界面用 `user_message()` 显示原因与建议；
+  失败时安装位置与报名数据保持原样。
+
 ## 一次运行的流程
 
 1. 界面收集参数 → `TaskManager.start()` 建 `RunConfig`、`GuiInputProvider`、`QueueSink`、`stop_event`。

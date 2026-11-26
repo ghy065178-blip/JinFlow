@@ -36,6 +36,11 @@
 「文件」菜单的旧版数据导入 / 档案导入导出 / 打开数据目录；「任务」菜单的
 预览提交数据 / 重命名任务 / 停止全部；「帮助」菜单的设置与关于（含日志脱敏、
 逐项确认、运行环境、合规说明）与隐私说明；预览提交数据弹窗。
+1.2.0 起「帮助」菜单新增「检查更新与升级…」，对应独立弹窗
+`ui/update_dialog.py`，并在「设置与关于」增加一个默认关闭的
+「启动时自动检查新版本」复选框；这些附加能力仍不占主界面，
+主界面的单页布局、全部文案、按钮、状态卡与配色逐项保持不变，
+`tests/test_ui_parity.py` 全部断言继续通过。
 
 ## 3. 交互逻辑与功能行为
 
@@ -83,6 +88,7 @@
 
 ```bash
 python -m unittest tests.test_ui_parity -v     # 界面一致性静态回归
-python -m unittest discover -s tests -t . -v    # 全量 95 项
+python -m unittest tests.test_update -v        # 1.2.0 检查更新与升级回归
+python -m unittest discover -s tests -t . -v    # 全量 152 项（原 95 + 更新 57）
 ```
 另可用 `PYTHONPATH=src python -m jsj_desktop` 打开窗口，与浏览器版面板逐项对照。

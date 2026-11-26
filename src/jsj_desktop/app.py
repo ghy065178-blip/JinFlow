@@ -10,6 +10,7 @@ import os
 import sys
 from pathlib import Path
 
+from . import __version__
 from .core.mapping import InputProvider
 
 
@@ -228,6 +229,67 @@ def run_tls_check():
     return 0
 
 
+def run_update_check(args):
+    """命令行检查更新（只读，不下载、不安装、不触碰报名数据）。"""
+    from .update import manifest, service
+
+    if args.manifest_url:
+        os.environ[manifest.ENV_MANIFEST_URL] = args.manifest_url
+    result = service.check_for_update()
+    print("=== 检查更新 ===")
+    print("当前版本   : %s" % result.current_version)
+    print("最新版本   : %s" % (result.latest_version or "获取失败"))
+    print("适用平台   : %s" % (result.target or "-"))
+    print("更新通道   : %s%s" % (result.source or "不可用",
+                                "（离线兜底）" if result.offline else ""))
+    print("结论       : %s" % result.reason)
+    if result.asset:
+        print("可升级包   : %s" % result.asset["name"])
+        print("下载地址   : %s" % result.asset["url"])
+    if result.channel_errors:
+        print("通道异常   : %s" % "；".join(result.channel_errors[:4]))
+    if result.notes:
+        print("版本说明   : %s" % result.notes.strip()[:400])
+    print("手动下载   : %s" % result.manual_url)
+    if not result.ok:
+        print("检查失败，未做任何改动。", file=sys.stderr)
+        return 2
+    return 0
+
+
+def run_update_apply(args):
+    """命令行触发升级：下载、校验、安装/切换并重启（失败保留原版本）。"""
+    from .update import manifest, service
+    from .update.errors import UpdateError
+
+    if args.manifest_url:
+        os.environ[manifest.ENV_MANIFEST_URL] = args.manifest_url
+
+    def progress(stage, pct, text):
+        print("[%3d%%] %s" % (pct, text), flush=True)
+
+    print("=== 应用内升级 ===")
+    print("当前版本   : %s" % __version__)
+    try:
+        result = service.apply_update(progress=progress,
+                                      relaunch=not args.no_relaunch,
+                                      sources=None)
+    except UpdateError as e:
+        print("更新失败：%s" % e.user_message(), file=sys.stderr)
+        print("当前版本与报名数据保持不变。", file=sys.stderr)
+        return 1
+    except Exception as e:  # noqa: BLE001
+        print("更新失败（未预期错误）：%s" % e, file=sys.stderr)
+        print("当前版本与报名数据保持不变。", file=sys.stderr)
+        return 1
+    print("结果       : %s" % result["message"])
+    print("目标版本   : v%s" % result["latest_version"])
+    print("安装位置   : %s" % result.get("installed_to", "-"))
+    if result.get("sha256"):
+        print("校验来源   : %s" % result.get("checksum_source", "-"))
+    return 0
+
+
 def build_parser():
     p = argparse.ArgumentParser(
         description="金数据报名助手 · 桌面版（默认图形界面）")
@@ -237,9 +299,17 @@ def build_parser():
                    help="无界面逻辑自检（不联网）")
     p.add_argument("--check-tls", action="store_true",
                    help="诊断 HTTPS 证书链与网络连通性（只读，不提交数据）")
+    p.add_argument("--check-update", action="store_true",
+                   help="检查最新版本并打印当前/最新版本信息（只读）")
+    p.add_argument("--apply-update", action="store_true",
+                   help="下载校验后安装并切换到最新版本")
+    p.add_argument("--no-relaunch", action="store_true",
+                   help="升级后不自动重启（供自动化验证使用）")
+    p.add_argument("--manifest-url", default="",
+                   help="覆盖更新清单地址（离线验证 / 镜像；对应 "
+                        "JSJ_UPDATE_MANIFEST_URL）")
     p.add_argument("--version", action="version",
-                   version="%(prog)s " + __import__(
-                       "jsj_desktop", fromlist=["__version__"]).__version__)
+                   version="%(prog)s " + __version__)
     p.add_argument("--data-dir", default="", help="覆盖本地数据目录（测试/便携版）")
     p.add_argument("--link", default="", help="本次表单链接或末尾 token")
     p.add_argument("--quick", "-y", action="store_true", help="快速模式，不询问")
@@ -260,6 +330,10 @@ def main(argv=None):
         return run_self_test()
     if args.check_tls:
         return run_tls_check()
+    if args.check_update:
+        return run_update_check(args)
+    if args.apply_update:
+        return run_update_apply(args)
     if args.cli:
         return run_cli(args)
     return run_gui(args)

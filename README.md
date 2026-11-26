@@ -41,11 +41,19 @@ jinshuju-registration-desktop/
 │   │   ├── config_store.py         # 报名信息.json 读写 + 自动备份
 │   │   ├── profile_store.py        # 多人档案 CRUD / 切换 / 导入导出
 │   │   └── settings_store.py       # 界面偏好与任务元信息
+│   ├── update/                     # 1.2.0：应用内检查更新与升级（纯标准库）
+│   │   ├── version.py              #   版本比较 + 1.0.x 历史版本兼容判定
+│   │   ├── manifest.py             #   更新清单 / Releases API / 四平台资产选择
+│   │   ├── client.py               #   多来源探测、下载、SHA256 校验、异常分类
+│   │   ├── installer.py            #   安装/切换、备份、回滚与旧安装探测
+│   │   └── service.py              #   升级流程编排
 │   ├── tasks/manager.py            # 最多 8 个独立任务、事件队列、启停与应答
 │   └── ui/                         # 原生图形界面
 │       ├── theme.py / widgets.py   # 复刻原面板 CSS 的深色主题、状态卡、滚动容器、彩色日志
-│       └── main_window.py          # 与原面板一致的单页主窗口（含菜单/弹窗附加入口）
-├── tests/                          # 95 项单元测试（含界面一致性）+ 合成样例
+│       ├── main_window.py          # 与原面板一致的单页主窗口（含菜单/弹窗附加入口）
+│       └── update_dialog.py        # 1.2.0：帮助菜单的检查更新弹窗（不占主界面）
+├── update/latest.json              # 版本无关的更新通道清单（1.2.0 / 四平台资产 / 历史版本）
+├── tests/                          # 单元测试（含界面一致性与升级端到端演练）+ 合成样例
 │   └── fixtures/                   # 合成 GraphQL 响应与黄金数据
 ├── legacy/auto_submit_reference.py # 旧脚本只读参考副本（已移除内置 token）
 ├── examples/                       # 占位符示例档案（非真实数据）
@@ -67,6 +75,9 @@ jinshuju-registration-desktop/
 └── tools/
     ├── check_no_pii.py             # 仓库/发布包敏感数据扫描器
     ├── migrate_legacy.py           # 旧版数据导入（命令行）
+    ├── check_update_channel.py     # 1.2.0：版本号 / 资产 / 历史版本兼容静态校验
+    ├── generate_update_manifest.py # 1.2.0：Release 时生成带 SHA256 的 latest.json
+    ├── upgrade_legacy.py           # 1.2.0：1.0.x 旧冻结包独立升级助手
     └── smoke_test.py               # 无界面整体自检
 ```
 
@@ -110,9 +121,12 @@ set PYTHONPATH=src && python -m jsj_desktop   # Windows CMD
 ```bash
 python -m jsj_desktop --self-test             # 无界面、无网络逻辑自检
 python -m jsj_desktop --cli --link https://jsj.top/f/xxxxx --dry-run
+python -m jsj_desktop --check-update         # 1.2.0：只读显示当前/最新版本
+python -m jsj_desktop --apply-update         # 1.2.0：校验后安装并切换到最新版
 python tools/smoke_test.py                    # 自检 + 全量单元测试
 python -m unittest discover -s tests -t . -v
 python tools/check_no_pii.py --strict         # 敏感数据扫描
+python tools/check_update_channel.py --offline  # 1.2.0：更新通道静态校验
 ```
 
 ### 发布包
@@ -186,7 +200,7 @@ Windows 解压 zip 后双击 `JinshujuDesktop.exe`。
 - `calibrate_clock` 6 次采样取中位数、`build_input` 的 `fillingDuration`、`submit_once` 的 success / wait / fatal / net / maybe 判定；
 - 等待心跳、提前量 `-6`、间隔 `0.05`、时长 `40`、冲刺随机抖动、重复提交保护与 `--quick` / `--dry-run` 语义。
 
-`tests/test_legacy_parity.py` 直接加载 `legacy/auto_submit_reference.py`（旧脚本只读副本，仅移除了内置活动 token），逐项比对输出；`tests/test_mapping.py` 用黄金数据断言最终提交值。当前共 **95 项测试全部通过**。
+`tests/test_legacy_parity.py` 直接加载 `legacy/auto_submit_reference.py`（旧脚本只读副本，仅移除了内置活动 token），逐项比对输出；`tests/test_mapping.py` 用黄金数据断言最终提交值。原有 **95 项测试全部继续通过**；1.2.0 新增 57 项更新功能回归，**全量 152 项通过**。
 
 > 唯一有意的业务差异：移除了内置的某次真实活动表单 token（隐私要求）。用户填写链接后，行为与「回车=使用上次链接」保持一致。
 
@@ -198,17 +212,44 @@ Windows 解压 zip 后双击 `JinshujuDesktop.exe`。
 - `tests/fixtures/` 与 `examples/` 只有合成数据和占位符（`<姓名占位>` 等）。
 - `tools/check_no_pii.py` 在 CI、发布前与打包脚本中强制执行；同时检查「禁止文件名、真实链接、内置 token、手机号、身份证号、非占位的个人信息键、硬编码凭据」。
 - 运行日志默认只在内存中；导出的日志、档案文件由用户显式选择保存位置。可勾选「日志脱敏显示」（只影响显示，不影响提交数据）。
+- 1.2.0 的检查更新功能只在用户主动触发时访问 GitHub（清单 / Releases API / 下载），请求中不含任何报名信息、档案或表单 token；默认关闭启动自动检查。详见 `docs/PRIVACY.md`。
 - 详见 `docs/PRIVACY.md`。
 
 ---
 
-## 8. 合规与免责声明
+## 8. 检查更新与升级（1.2.0）
+
+菜单 **帮助 → 检查更新与升级…** 打开独立弹窗，显示**当前版本**、**最新版本**、
+适用平台、更新通道与版本说明，并可一键完成「下载 → SHA256 校验 → 安装 →
+重启」。支持 Intel Mac / Apple Silicon Mac / Windows x86_64 / Windows ARM64
+四套发布包，资产按系统 + 架构精确匹配，绝不跨架构混装。
+
+| 项 | 行为 |
+|---|---|
+| 检查来源 | `update/latest.json` 静态清单（权威）、GitHub Releases API、Release 资产 `latest.json`；取其中版本号最高者；全部失败则显示随包兜底信息并禁止自动安装 |
+| 校验 | 下载 `SHA256SUMS.txt`，与清单内置哈希交叉核对，任一不一致即中止 |
+| 安装 | macOS 备份旧 `.app` → 重做 ad-hoc 签名 → 去隔离属性 → 重启；Windows 暂存新目录并由独立脚本在退出后替换；源码运行切换到 `<数据目录>/updates/1.2.0/` |
+| 失败处理 | 网络、限流、证书、清单、资产、校验和、版本/架构不符、写入失败均有明确中文提示；旧版本与报名数据保持原样 |
+| 历史版本 | 1.0.0 / 1.0.1 / 1.0.2 / 1.0.3 均可直接升到 1.2.0；四版本共用同一数据目录与配置格式，无需迁移 |
+
+> 已发布的 1.0.x 冻结包内没有更新代码，无法凭空获得应用内检查能力：这些用户
+> 可下载 Release 资产 `JinshujuDesktop-Upgrade-Helper.py`，用本机 Python 执行
+> `python JinshujuDesktop-Upgrade-Helper.py --upgrade` 一次即可校验并切换到
+> 1.2.0；或直接下载对应平台的 1.2.0 安装包覆盖安装。1.2.0 起均可在应用内升级。
+
+「帮助 → 设置与关于」可勾选「启动时自动检查新版本」，**默认关闭**；只有用户
+主动打开更新窗口、触发升级或显式开启该开关时才会访问 GitHub，且不上传任何
+报名信息。详见 `docs/RELEASE.md` 与 `docs/PRIVACY.md`。
+
+---
+
+## 9. 合规与免责声明
 
 本项目沿用原脚本的纯接口提交方式，**仅在表单未启用验证码时可用**。请仅用于本人合法报名，遵守目标平台服务条款、活动规则与当地法律，勿用于批量刷单、绕过限制或干扰服务。软件按 MIT 许可「按原样」提供，作者不对报名结果、账号状态或平台规则变化负责。
 
 ---
 
-## 9. 常见问题
+## 10. 常见问题
 
 **Q：启动时报 `No module named tkinter`？**
 A：使用 python.org 官方安装包并勾选「tcl/tk and IDLE」；部分精简版/嵌入式 Python 不含 Tk。也可用 `--cli` 临时运行。
@@ -220,4 +261,10 @@ A：纯接口提交不可用，控制台会提示并停止，请在网页端手�
 A：在左栏「报名信息」为每人存一套档案；点「+ 新建任务」，各任务选择不同档案、设置不同时间，可同时运行（最多 8 个）。
 
 **Q：升级后旧数据会丢吗？**
-A：不会。旧版文件保持原样，用菜单「导入旧版数据…」或 `tools/migrate_legacy.py` 复制到新的用户数据目录即可。
+A：不会。旧版文件保持原样，用菜单「导入旧版数据…」或 `tools/migrate_legacy.py` 复制到新的用户数据目录即可。1.2.0 的应用内升级也完全不读写 `报名信息.json` / `profiles.json`。
+
+**Q：1.0.x 旧版本怎么升到 1.2.0？**
+A：旧冻结包没有更新代码，请下载 Release 资产 `JinshujuDesktop-Upgrade-Helper.py` 运行 `python JinshujuDesktop-Upgrade-Helper.py --upgrade`，或直接下载 1.2.0 安装包覆盖；数据目录通用。1.2.0 之后可直接在「帮助 → 检查更新与升级…」完成。
+
+**Q：检查更新提示失败怎么办？**
+A：弹窗会给出具体原因（网络、GitHub 限流、证书、缺少校验和、版本/架构不符等）。可检查网络与系统时间、稍后重试，或用「复制下载链接」手动下载；失败时当前版本与数据不会改变。

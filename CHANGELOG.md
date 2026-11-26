@@ -1,7 +1,48 @@
 # 更新日志
 
-本项目遵循语义化版本。版本号同时维护在 `src/jsj_desktop/__init__.py`、
-`pyproject.toml` 与 `packaging/version_info.txt`。
+本项目遵循语义化版本。版本号统一维护在 `src/jsj_desktop/__init__.py`
+（`__version__`）、`pyproject.toml`、`packaging/version_info.txt` 与
+`update/latest.json`（`latest_version` / `upgrade_target`），发布前由
+`tools/check_update_channel.py --offline` 强制核对。
+
+## 1.2.0 (2026-11-26)
+
+新增**应用内检查更新与升级**；原有报名业务逻辑、界面呈现与数据格式全部不变。
+
+### 新增
+- `src/jsj_desktop/update/`：版本比较（含 `v` 前缀、四段式版本号）、
+  多来源更新通道（静态清单 / GitHub Releases API / Release 资产 / 随包兜底）、
+  SHA256 校验、四平台安装与切换、异常分类与回滚。
+- 「帮助 → 检查更新与升级…」弹窗：显示当前版本、最新版本、适用平台、更新通道
+  与版本说明；一键下载 → 校验 → 安装 → 重启；失败用弹窗给出原因与建议，
+  且不改动现有版本与报名数据。
+- 可选的「启动时自动检查新版本」开关（`settings.json` 的
+  `check_update_on_startup`，默认关闭，保持原有不主动联网行为）。
+- 命令行：`--check-update`（只读显示版本信息）、`--apply-update`、
+  `--no-relaunch`、`--manifest-url`。
+- `update/latest.json` 版本无关清单；`tools/generate_update_manifest.py` 在
+  Release 时填入真实 SHA256；`tools/check_update_channel.py` 在 CI/Release
+  校验版本号、四平台资产与历史版本升级路径。
+- `tools/upgrade_legacy.py`（发布资产 `JinshujuDesktop-Upgrade-Helper.py`）：
+  供 1.0.0～1.0.3 已冻结旧包用户一次性检测、校验并切换到 1.2.0。
+- 构建脚本随包打入 `update/latest.json` 与 `APP_VERSION.txt` 版本标记，
+  并在打包后校验；Release 工作流上传 `latest.json` 与升级助手。
+
+### 历史版本兼容
+- 发布页现有 v1.0.0 / v1.0.1 / v1.0.2 / v1.0.3 全部登记在清单
+  `legacy_versions` 与 `legacy_upgrade_paths`，最低可升级版本为 1.0.0。
+- 四个版本使用同一用户数据目录与同一 `报名信息.json` / `profiles.json` 格式；
+  升级过程不读写这些文件，因此无需数据迁移。
+- 说明：已发布的 1.0.x 冻结包内**没有**更新代码，无法凭空获得「应用内检查」；
+  其用户按上述升级助手或手动下载 1.2.0 覆盖安装即可。1.2.0 起所有新版本
+  均可在应用内直接检查与升级。
+
+### 验证
+- 新增 `tests/test_update.py`：版本兼容、清单校验、多通道容错、校验和、
+  安装/回滚、界面与 CLI 入口、发布配置一致性，以及用本地 HTTP 服务器模拟
+  Release 的端到端「检查 → 下载 → 校验 → 切换到 1.2.0」演练。
+- 既有 95 项测试全部继续通过，新增 57 项，全量 **152 项通过**；
+  `--self-test`、`check_no_pii --strict`、`check_update_channel --offline` 均通过。
 
 ## 1.0.3 (2026-11-26)
 

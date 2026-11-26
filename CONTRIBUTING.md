@@ -20,6 +20,7 @@ Python 3.11+（含 Tcl/Tk）。运行时零第三方依赖，请不要在 `src/`
 python -m unittest discover -s tests -t . -v
 python tools/check_no_pii.py --strict
 python -m jsj_desktop --self-test
+python tools/check_update_channel.py --offline
 ```
 
 任何改动 `src/jsj_desktop/core/` 的 PR 都必须保证 `tests/test_legacy_parity.py`
@@ -38,6 +39,9 @@ python -m jsj_desktop --self-test
   两者只通过 `tasks/manager.py` 的事件队列交互。
 - 新增配置项要同步更新 `docs/CONFIGURATION.md`、`README.md` 与相关测试。
 - 新增平台或发布包要同步更新 `.github/workflows/release.yml` 与 `docs/RELEASE.md`。
+- 发新版本要同步四处版本号（`__init__.py` / `pyproject.toml` /
+  `packaging/version_info.txt` / `update/latest.json`）、CHANGELOG 与
+  `legacy_versions` 兼容表，并运行 `tools/check_update_channel.py --offline`。
 - 提交信息建议用中文简述，PR 说明改动动机与验证方式。
 
 ## 合规

@@ -15,6 +15,8 @@
 | 快速模式 / 仅演练 / 逐项确认 | 关 | 任务控制台 |
 | 自动应答缺项 | 开 | 任务控制台 |
 | 日志脱敏显示 | 关 | 实时日志 / `settings.json` |
+| 启动时自动检查更新 | 关 | 「设置与关于」/ `settings.json` 的 `check_update_on_startup`（1.2.0） |
+| 最新版本 / 升级目标 | `1.2.0` | `update/latest.json`（只读发布通道） |
 | 北京时间时区 | UTC+8（固定） | `core/constants.py` |
 | User-Agent | 与旧脚本一致 | `core/constants.py` |
 
@@ -22,7 +24,9 @@
 
 | 变量 | 作用 |
 |---|---|
-| `JSJ_DATA_DIR` | 覆盖用户数据目录（便携版、测试、CI）。未设置时按平台默认路径 |
+| `JSJ_DATA_DIR` | 覆盖用户数据目录（便携版、测试、CI）。未设置时按平台默认路径；1.2.0 起也是新版暂存目录 `<数据目录>/updates/` 的根目录 |
+| `JSJ_UPDATE_MANIFEST_URL` | 1.2.0：指定**唯一**更新清单来源（镜像 / 离线验证 / 企业内网），设置后不再访问其它通道；命令行等价参数 `--manifest-url` |
+| `SSL_CERT_FILE` | 冻结版 macOS 由 `packaging/entry_point.py` 自动指向随包 `certs/cacert.pem`；检查更新同样走系统证书校验，不关闭验证 |
 | `PYTHONIOENCODING` | 可选；旧 `.bat` 会设为 utf-8，桌面版由内部 UTF-8 事件队列处理，无需设置 |
 | `PYTHONPATH` | 源码运行时指向 `src/`（或先 `pip install -e .`） |
 
@@ -91,9 +95,13 @@ Linux   : $XDG_DATA_HOME/jinshuju-desktop/ 或 ~/.local/share/jinshuju-desktop/
   "mask_logs": false,
   "auto_scroll": true,
   "auto_reply": true,
+  "check_update_on_startup": false,
   "tasks": [{"id": "t1", "name": "任务 1", "profile_id": "p1"}]
 }
 ```
+
+- `check_update_on_startup` 默认 `false`（1.2.0 新增）；旧版 `settings.json`
+  缺少该键时按 `false` 处理，格式完全向后兼容。
 
 ## 5. 提交数据格式（业务结果不变）
 
@@ -120,7 +128,37 @@ Linux   : $XDG_DATA_HOME/jinshuju-desktop/ 或 ~/.local/share/jinshuju-desktop/
 }
 ```
 
-## 6. 敏感数据处理
+## 6. 更新通道与版本清单（1.2.0）
+
+`update/latest.json` 是版本无关的只读清单，历史版本与 1.2.0 使用同一格式：
+
+```json
+{
+  "schema": 1,
+  "latest_version": "1.2.0",
+  "tag": "v1.2.0",
+  "min_supported_version": "1.0.0",
+  "upgrade_target": "1.2.0",
+  "legacy_versions": ["1.0.0", "1.0.1", "1.0.2", "1.0.3"],
+  "assets": {"macos-arm64": {"zip": "JinshujuDesktop-macos-arm64.zip"}},
+  "checksums_asset": "SHA256SUMS.txt",
+  "download_base": ".../releases/download/v1.2.0/"
+}
+```
+
+- 仓库中的模板 `sha256` 为空；Release 工作流调用
+  `tools/generate_update_manifest.py` 从 `SHA256SUMS.txt` 填入真实哈希，
+  生成随 Release 发布的 `latest.json`。
+- 应用内默认依次探测：静态清单 → GitHub Releases API → Release 资产清单，
+  取版本号最高者；全部失败才回退随包清单并禁止自动安装。若设置了
+  `JSJ_UPDATE_MANIFEST_URL`，则只使用该地址作为唯一来源。
+- `tools/check_update_channel.py --offline` 在 CI / Release 校验四处版本号一致、
+  四平台资产名、`legacy_upgrade_paths` 与校验和覆盖。
+- 新版本暂存目录：`<数据目录>/updates/<版本>/<target>/`；旧安装备份为
+  `JinshujuDesktop.app.backup-<旧版本>` 或 `JinshujuDesktop.backup-<旧版本>`。
+  这些目录只含程序文件，不含报名信息。
+
+## 7. 敏感数据处理
 
 - 上面两个数据文件在 `.gitignore` 中按中文名与英文名同时屏蔽；发布包构建时会额外扫描。
 - 示例与测试只用 `<…占位>`、`EXAMPLE` 等占位值，见 `examples/` 与 `tests/fixtures/`。

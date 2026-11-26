@@ -77,6 +77,10 @@ class MainWindow(Tk):
         saved = self.manager.settings.load()
         self.mask_var.set(bool(saved.get("mask_logs", False)))
         self.autoscroll_var.set(bool(saved.get("auto_scroll", True)))
+        # 1.2.0：启动自动检查更新默认关闭，保持原有「不主动发起网络请求」行为
+        self.update_var.set(bool(saved.get("check_update_on_startup", False)))
+        if self.update_var.get():
+            self.after(2000, self._auto_check_update)
 
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.after(80, self._poll)
@@ -122,6 +126,8 @@ class MainWindow(Tk):
         help_menu.add_command(label="使用说明", command=self._show_guide)
         help_menu.add_command(label="设置与关于…", command=self._show_settings)
         help_menu.add_command(label="隐私与数据安全", command=self._show_privacy)
+        help_menu.add_separator()
+        help_menu.add_command(label="检查更新与升级…", command=self._show_update)
         help_menu.add_command(label="关于", command=self._about)
         menubar.add_cascade(label="帮助", menu=help_menu)
         self.config(menu=menubar)
@@ -517,6 +523,11 @@ class MainWindow(Tk):
                         style="Card.TCheckbutton").pack(anchor="w")
         ttk.Checkbutton(adv, text="启动时逐项确认信息（等价于终端输入 m）",
                         variable=self.modify_var,
+                        style="Card.TCheckbutton").pack(anchor="w", pady=(6, 0))
+        self.update_var = BooleanVar(value=False)
+        ttk.Checkbutton(adv, text="启动时自动检查新版本（需联网访问 GitHub，默认关闭）",
+                        variable=self.update_var,
+                        command=self._on_update_check_changed,
                         style="Card.TCheckbutton").pack(anchor="w", pady=(6, 0))
 
         env = ttk.LabelFrame(parent, text="运行环境", padding=12)
@@ -1471,6 +1482,40 @@ class MainWindow(Tk):
             "· 可通过「文件 → 导出档案」自行备份，导入导出由用户显式触发；\n"
             "· 可在「帮助 → 设置与关于」勾选「日志脱敏显示」隐藏手机号与长数字；\n"
             "· 详情见 docs/PRIVACY.md。"))
+
+    # -------------------- 1.2.0 应用内检查更新（附加能力，不占主界面） ------
+    def _show_update(self):
+        """「帮助 → 检查更新与升级…」：独立弹窗，主界面布局与功能保持不变。"""
+        try:
+            from .update_dialog import UpdateDialog
+            win = getattr(self, "update_window", None)
+            if win is not None and win.winfo_exists():
+                win.show()
+            else:
+                self.update_window = UpdateDialog(self)
+        except Exception as e:
+            self._toast("无法打开更新窗口：%s" % e, "err")
+
+    def _on_update_check_changed(self):
+        s = self.manager.settings.load()
+        s["check_update_on_startup"] = self.update_var.get()
+        self.manager.settings.save(s)
+        self._toast("启动时自动检查更新已" +
+                    ("开启" if self.update_var.get() else "关闭"))
+
+    def _auto_check_update(self):
+        """可选的启动检查：失败静默，仅在发现新版本时提示，不改动任何数据。"""
+        def work():
+            try:
+                from ..update import service
+                r = service.check_for_update()
+                if r.ok and r.update_available:
+                    text = ("发现新版本 v%s，可用「帮助 → 检查更新与升级」更新"
+                            % r.latest_version)
+                    self.after(0, lambda: self._toast(text, "warn"))
+            except Exception:
+                pass
+        threading.Thread(target=work, daemon=True).start()
 
     def _about(self):
         messagebox.showinfo("关于", "%s · 桌面版 v%s\n\n%s" %
