@@ -1,0 +1,51 @@
+{
+  "_comment": "完全合成的表单结构样例，不含任何真实活动、字段值或个人信息。仅用于单元测试。",
+  "data": {
+    "publishedForm": {
+      "status": {"key": "not_opened"},
+      "form": {
+        "name": "示例活动（合成数据）",
+        "setting": {"enableCaptcha": false},
+        "fields": {
+          "nodes": [
+            {"__typename": "NameField", "label": "姓名", "type": "NameField", "apiCode": "field_1", "validations": ["presence"]},
+            {"__typename": "NameField", "label": "学号", "type": "NameField", "apiCode": "field_2", "validations": ["presence"]},
+            {"__typename": "RadioButton", "label": "培养层次", "type": "RadioButton", "apiCode": "field_3", "validations": ["presence"], "choices": [{"value": "A1", "name": "硕士"}, {"value": "A2", "name": "博士"}]},
+            {"__typename": "RadioButton", "label": "年级", "type": "RadioButton", "apiCode": "field_4", "validations": ["presence"], "choices": [{"value": "B1", "name": "2024级"}, {"value": "B2", "name": "2025级"}]},
+            {"__typename": "RadioButton", "label": "班级", "type": "RadioButton", "apiCode": "field_5", "validations": ["presence"], "choices": [{"value": "C1", "name": "甲班"}, {"value": "C2", "name": "乙班"}]},
+            {"__typename": "NameField", "label": "电话", "type": "NameField", "apiCode": "field_6", "validations": ["presence"]},
+            {"__typename": "NameField", "label": "备注", "type": "NameField", "apiCode": "field_7", "validations": []},
+            {"__typename": "Checkboxes", "label": "可多选", "type": "Checkboxes", "apiCode": "field_8", "validations": [], "choices": [{"value": "D1", "name": "选项甲"}, {"value": "D2", "name": "选项乙"}]}
+          ]
+        },
+        "fieldRulesGroupByTarget": [
+          {
+            "target": "field_5",
+            "mode": "show",
+            "conditionGroup": {
+              "operator": "and",
+              "conditionGroups": [
+                {"operator": "and", "conditions": [{"trigger": "field_3", "comparator": "equal", "value": ["A1"]}]},
+                {"operator": "and", "conditions": [{"trigger": "field_4", "comparator": "equal", "value": ["B1"]}]}
+              ]
+            }
+          },
+          {
+            "target": "field_6",
+            "mode": "show",
+            "conditionGroup": {
+              "operator": "and",
+              "conditionGroups": [
+                {"operator": "and", "conditions": [{"trigger": "field_3", "comparator": "equal", "value": ["A1"]}]},
+                {"operator": "and", "conditions": [{"trigger": "field_3", "comparator": "equal", "value": ["A2"]}]}
+              ]
+            }
+          }
+        ]
+      },
+      "interceptionSetting": {
+        "byTimeRangeCloseRule": {"startTime": "2030-01-01T10:00:00+08:00", "endTime": null}
+      }
+    }
+  }
+}

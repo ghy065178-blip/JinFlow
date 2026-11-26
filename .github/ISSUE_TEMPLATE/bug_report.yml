@@ -1,0 +1,44 @@
+name: 问题反馈
+description: 反馈桌面版运行 / 界面 / 构建问题（请勿粘贴真实报名信息）
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **请勿在本页面填写或粘贴任何真实姓名、学号、电话、表单链接或档案内容。**
+        日志片段请先脱敏；真实数据请仅在本地保存。
+  - type: input
+    id: platform
+    attributes:
+      label: 平台与架构
+      placeholder: "例如 Windows 11 ARM64 / macOS 15 Apple Silicon / Intel Mac"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本 / 构建方式
+      placeholder: "例如 v1.0.0 发布包 或 源码 Python 3.12"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: 现象与复现步骤
+      description: 请描述操作步骤、期望结果与实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: 脱敏后的日志 / 错误提示
+      description: 请删除姓名、学号、电话、token 等敏感内容
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 确认
+      options:
+        - label: 我已确认提交内容不含任何真实个人信息
+          required: true

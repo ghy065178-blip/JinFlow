@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jinshuju-registration-desktop"
+version = "1.0.0"
+description = "金数据报名助手 · 跨平台桌面版（原生图形界面、多人档案、多开任务）"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Jinshuju Registration Desktop contributors" }]
+keywords = ["jinshuju", "desktop", "tkinter", "form", "registration"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Environment :: X11 Applications",
+    "Topic :: Desktop Environment",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pyinstaller>=6.10",
+    "pytest>=8.0",
+    "build>=1.2",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-org/jinshuju-registration-desktop"
+Issues = "https://github.com/your-org/jinshuju-registration-desktop/issues"
+
+[project.gui-scripts]
+jsj-desktop = "jsj_desktop.app:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["jsj_desktop*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

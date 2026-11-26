@@ -1,0 +1,117 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15-intel, target: macos-x86_64 }
+          - { os: macos-15,       target: macos-arm64 }
+          - { os: windows-2022,   target: windows-x86_64 }
+          - { os: windows-11-arm, target: windows-arm64 }
+    env:
+      PYTHONPATH: src
+      PYTHONIOENCODING: utf-8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12 (native architecture)
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Verify native architecture
+        run: python -c "import platform,sys; print(sys.version); print(platform.system(), platform.machine())"
+
+      - name: Install build dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements-dev.txt
+
+      - name: Unit tests + sensitive-data gate
+        shell: bash
+        run: |
+          set -e
+          python -m unittest discover -s tests -t . -v
+          python tools/check_no_pii.py --strict
+          python -m jsj_desktop --self-test
+
+      - name: Build release package
+        run: python packaging/build.py --target ${{ matrix.target }}
+
+      - name: Verify macOS binary architecture
+        if: startsWith(matrix.target, 'macos')
+        run: |
+          lipo -archs dist/raw/${{ matrix.target }}/JinshujuDesktop.app/Contents/MacOS/JinshujuDesktop
+          file dist/raw/${{ matrix.target }}/JinshujuDesktop.app/Contents/MacOS/JinshujuDesktop
+
+      - name: Verify Windows executable exists
+        if: startsWith(matrix.target, 'windows')
+        shell: pwsh
+        run: |
+          Get-Item "dist/raw/${{ matrix.target }}/JinshujuDesktop/JinshujuDesktop.exe" | Select-Object FullName, Length
+          Get-ChildItem "dist/*.zip" | Select-Object Name, Length
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.target }}
+          path: |
+            dist/*.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          merge-multiple: true
+          path: release-assets
+
+      - name: Generate checksums
+        run: |
+          cd release-assets
+          sha256sum JinshujuDesktop-*.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body: |
+            ## 下载
+
+            | 平台 | 包 |
+            |---|---|
+            | Intel Mac (x86_64) | `JinshujuDesktop-macos-x86_64.zip` |
+            | Apple Silicon Mac (arm64) | `JinshujuDesktop-macos-arm64.zip` |
+            | Windows x86_64 / AMD64 | `JinshujuDesktop-windows-x86_64.zip` |
+            | Windows ARM64 | `JinshujuDesktop-windows-arm64.zip` |
+
+            校验：`SHA256SUMS.txt`。首次使用请在「任务控制台」填写本次表单链接；
+            所有报名信息与多人档案只保存在本机用户数据目录，发布包不含任何个人信息。
+
+            macOS 包若未签名/未公证，需在「系统设置 → 隐私与安全性」中手动允许；
+            Windows 包若未签名会出现 SmartScreen 提示。详见 docs/RELEASE.md。
+          files: |
+            release-assets/JinshujuDesktop-*.zip
+            release-assets/SHA256SUMS.txt

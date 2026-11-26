@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,    label: linux-x86_64 }
+          - { os: windows-2022,     label: windows-x86_64 }
+          - { os: windows-11-arm,   label: windows-arm64 }
+          - { os: macos-15-intel,   label: macos-x86_64 }
+          - { os: macos-15,         label: macos-arm64 }
+    env:
+      PYTHONPATH: src
+      PYTHONIOENCODING: utf-8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Show runner / interpreter
+        run: python -c "import sys, platform; print(sys.version); print(platform.system(), platform.machine())"
+
+      - name: Install dev dependencies
+        run: python -m pip install --upgrade pip pytest build
+
+      - name: Compile sources
+        run: python -m compileall -q src
+
+      - name: Unit tests (incl. legacy parity + golden data)
+        run: python -m unittest discover -s tests -t . -v
+
+      - name: Sensitive-data scan (repository)
+        run: python tools/check_no_pii.py --strict
+
+      - name: Headless logic self-test
+        run: python -m jsj_desktop --self-test
+
+      - name: Tk availability (informational)
+        continue-on-error: true
+        run: python -c "import tkinter; print('Tk', tkinter.TkVersion)"
