@@ -324,7 +324,8 @@ $ErrorActionPreference = 'Stop'
 $Target = $env:JSJ_UPDATE_TARGET
 $Staged = $env:JSJ_UPDATE_STAGED
 $Backup = $env:JSJ_UPDATE_BACKUP
-$log = Join-Path $PSScriptRoot 'install.log'
+$log = $env:JSJ_UPDATE_LOG
+if (-not $log) { $log = Join-Path $PSScriptRoot 'install.log' }
 $movedOld = $false
 $movedNew = $false
 $parentExited = $false
@@ -389,6 +390,7 @@ try {
         if ($parentExited -and $Relaunch -eq 1) {
             $env:JSJ_UPDATE_FAILURE_LOG = $log
             $app = Open-App
+            $null = $app.WaitForExit(5000)
             $app.Dispose()
         }
     } catch {
@@ -452,6 +454,7 @@ def _apply_windows_install(plan, relaunch, runner, pid):
         "JSJ_UPDATE_TARGET": str(old),
         "JSJ_UPDATE_STAGED": str(staged),
         "JSJ_UPDATE_BACKUP": plan["backup_path"],
+        "JSJ_UPDATE_LOG": str(log),
         "JSJ_UPDATE_PARENT_ID": str(pid),
         "JSJ_UPDATE_RELAUNCH": "1" if relaunch else "0",
     }
