@@ -43,6 +43,12 @@ panel_url.txt / control_panel_error.log / *.log / 多开任务/ / 多开任务/t
 
 `tests/`、`examples/` 内的合成链接按设计豁免（这些目录只放测试数据），其余路径一律严格检查。
 
+**运行时数据豁免**：PyInstaller 冻结包会携带 Tcl/Tk 自带的编码表
+（`_tcl_data/` / `_tk_data/` 下的 `.enc` 等），其中含大量纯数字表格，
+并非用户数据。这些路径只跳过「内容模式匹配」，**文件名禁用检查仍然生效**；
+任何随包携带的 `报名信息.json` / `个人档案.json` 依旧会被拦截。
+该豁免有专门的回归测试覆盖（模拟发布包含编码表 → 不误报，含真实档案 → 仍拦截）。
+
 ### 4. CI / 发布层
 
 - `ci.yml` 每个平台都执行 `python tools/check_no_pii.py --strict`，失败即中断。

@@ -122,7 +122,7 @@ git push origin v1.0.0
 | macOS `.app` 体积异常大 | zip 未保留符号链接；必须使用 `ditto`/`zip -y`，不要普通 `shutil.make_archive` |
 | macOS 提示「已损坏，无法打开」 | 未签名/未公证，或下载时带了 quarantine 属性；按第 5 节签名公证 |
 | Windows 提示 SmartScreen | 未做代码签名；用证书签名或提示用户手动放行 |
-| 构建产物被 PII 扫描拦截 | 检查是否把本地数据目录误加进 `--add-data`；只应包含 `tests/fixtures/` 合成样例 |
+| 构建产物被 PII 扫描拦截 | 检查是否把本地数据目录误加进 `--add-data`；只应包含 `tests/fixtures/` 合成样例。Tcl/Tk 编码表已列入运行时数据豁免，若仍有误报见 `docs/PRIVACY.md` |
 | 私有仓库 `windows-11-arm` 无法启动 | 该托管 runner 仅对公开仓库免费；改用自托管 ARM64 runner |
 
 ## 8. 版本与变更

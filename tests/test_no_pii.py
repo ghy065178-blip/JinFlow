@@ -33,6 +33,35 @@ class PiiTest(unittest.TestCase):
         check_no_pii._scan_json("fixture.json", text, found)
         self.assertEqual(found, [])
 
+    def test_runtime_tcl_encoding_tables_are_not_false_positives(self):
+        """PyInstaller 随包的 Tcl/Tk 编码表含大量长数字，不能误判为个人信息。"""
+        import os
+        import tempfile
+        import zipfile
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = os.path.join(tmp, "release.zip")
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr(
+                    "JinshujuDesktop/_internal/_tcl_data/encoding/big5.enc",
+                    "0x8140 123456789012345678\n0x8141 13800000000\n")
+                zf.writestr(
+                    "JinshujuDesktop.app/Contents/Resources/_tcl_data/"
+                    "encoding/macJapan.enc",
+                    "0000 908456789012345678\n18000000000\n")
+            self.assertEqual(check_no_pii.scan_artifact(archive), [])
+
+    def test_release_package_with_real_personal_file_still_blocked(self):
+        import os
+        import tempfile
+        import zipfile
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = os.path.join(tmp, "bad-release.zip")
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("JinshujuDesktop/_internal/报名信息.json",
+                            '{"姓名": "张三"}')
+            findings = check_no_pii.scan_artifact(archive)
+            self.assertTrue(findings, "真实个人信息文件仍必须被拦截")
+
     def test_synthetic_paths_with_zip_prefix_are_exempt(self):
         found = []
         check_no_pii._scan_text(

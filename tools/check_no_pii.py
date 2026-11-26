@@ -30,7 +30,12 @@ SKIP_DIRS = {".git", "__pycache__", ".pytest_cache", ".mypy_cache", ".venv",
 SKIP_FILES = {"check_no_pii.py", "test_no_pii.py", "package-lock.json"}
 BINARY_EXT = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".icns", ".pdf",
               ".zip", ".7z", ".exe", ".dll", ".so", ".dylib", ".pyd",
-              ".pyc", ".woff", ".ttf", ".otf", ".mp4", ".wasm"}
+              ".pyc", ".woff", ".ttf", ".otf", ".mp4", ".wasm", ".enc"}
+
+# PyInstaller 冻结后随包携带的 Tcl/Tk 运行时数据（编码表 .enc 等）含大量纯数字
+# 表格，不是用户数据；跳过内容模式匹配，但仍执行文件名/扩展名禁用检查。
+RUNTIME_DATA_MARKERS = ("/_tcl_data/", "/_tk_data/", "/tcl8/", "/tk8/",
+                        "/_internal/tcl/", "/_internal/tk/")
 
 FORBIDDEN_NAMES = [
     re.compile(r"^报名信息.*\.json$", re.I),
@@ -80,7 +85,14 @@ def _is_placeholder(value):
     return any(m.lower() in low for m in PLACEHOLDER_MARKERS)
 
 
+def _is_runtime_data(rel):
+    normalized = "/" + str(rel).replace("\\", "/")
+    return any(marker in normalized for marker in RUNTIME_DATA_MARKERS)
+
+
 def _scan_text(rel, text, findings):
+    if _is_runtime_data(rel):
+        return
     normalized = rel.replace("\\", "/")
     parts = normalized.split("/")[:-1]
     # 允许 tests/ 与 examples/ 作为任意层级下的目录（例如源码压缩包带顶层目录名）
@@ -102,6 +114,8 @@ def _scan_text(rel, text, findings):
 
 
 def _scan_json(rel, text, findings):
+    if _is_runtime_data(rel):
+        return
     try:
         data = json.loads(text)
     except Exception:
