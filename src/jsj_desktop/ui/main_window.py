@@ -216,6 +216,8 @@ class MainWindow(Tk):
         self._build_console()
         self._build_info()
         self._build_logs()
+        # 所有左栏控件创建完成后，统一挂上滚轮/触控板/触摸滚动支持
+        self.left_scroll.bind_wheel_tree()
 
     def _build_overlays(self):
         self._build_toast()
@@ -980,6 +982,7 @@ class MainWindow(Tk):
             ttk.Label(self.fields_box,
                       text="暂无字段，请先在上方「读取表单」。",
                       style="CardHint.TLabel").grid(row=0, column=0, sticky="w")
+            self.left_scroll.bind_wheel_tree()
             return
         for i, f in enumerate(self.field_defs):
             row = ttk.Frame(self.fields_box, style="Card.TFrame", padding=(6, 5))
@@ -1004,6 +1007,8 @@ class MainWindow(Tk):
                     .grid(row=2, column=0, sticky="w", pady=(2, 0))
             self.field_widgets[f["api"]] = {"widget": w, "field": f, "var": var}
             self.field_rows[f["api"]] = row
+        # 动态字段控件是新建的，需要重新挂滚动支持
+        self.left_scroll.bind_wheel_tree()
         self._load_values()
         self._refresh_visibility()
 

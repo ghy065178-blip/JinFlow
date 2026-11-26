@@ -5,6 +5,6 @@
 核心业务逻辑与旧版 auto_submit.py 保持一致，详见 docs/FEATURE_PARITY.md。
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 __app_name__ = "金数据报名助手"
 __app_id__ = "JinshujuDesktop"

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jinshuju-registration-desktop"
-version = "1.0.0"
+version = "1.0.1"
 description = "金数据报名助手 · 跨平台桌面版（原生图形界面、多人档案、多开任务）"
 readme = "README.md"
 requires-python = ">=3.11"

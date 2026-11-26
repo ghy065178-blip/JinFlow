@@ -9,7 +9,22 @@ from .theme import LEVEL_COLORS, PALETTE, font_family
 
 
 class ScrollableFrame(ttk.Frame):
-    """带纵向滚动条的容器；内容放 self.body。"""
+    """带纵向滚动条的容器；内容放 self.body。
+
+    滚动输入支持三种来源：
+      * 鼠标滚轮 / 触控板：<MouseWheel>（Windows、macOS），<Button-4/5>（Linux）；
+      * 触摸屏：在面板空白处按住拖动（Button-1 拖拽平移）；
+      * 原有滚动条拖动保持不变。
+
+    实现要点：滚轮事件由 Tk 派发给指针下的最深层控件，不会自动冒泡到父容器，
+    因此不能只在容器自身绑定。这里给整棵子树追加一个唯一的 bindtag，再在 tag
+    上统一绑定处理函数；tag 只作用于本容器内的控件，右侧实时终端等区域不受影响。
+    bind_wheel_tree() 幂等，动态重建字段控件后重新调用即可。
+    """
+
+    # 这些是非交互容器/标签，才接管拖拽平移；输入、下拉、复选、按钮等不接管，
+    # 避免破坏选择文本、下拉选择、点击等原有交互。
+    PANNABLE = (tk.Frame, ttk.Frame, tk.Label, ttk.Label, tk.Canvas)
 
     def __init__(self, parent, **kwargs):
         super().__init__(parent, **kwargs)
@@ -25,18 +40,78 @@ class ScrollableFrame(ttk.Frame):
         self.vsb.pack(side="right", fill="y")
         self.body.bind("<Configure>", self._on_configure)
         self.canvas.bind("<Configure>", self._on_canvas)
-        self._bind_wheel(self)
 
-    def _bind_wheel(self, widget):
-        widget.bind("<MouseWheel>", self._on_wheel, add="+")
-        widget.bind("<Button-4>", self._on_wheel, add="+")
-        widget.bind("<Button-5>", self._on_wheel, add="+")
+        suffix = str(id(self))
+        self._wheel_tag = "JSJWheel_" + suffix
+        self._pan_tag = "JSJPan_" + suffix
+        self.bind_class(self._wheel_tag, "<MouseWheel>", self._on_wheel)
+        self.bind_class(self._wheel_tag, "<Button-4>", self._on_wheel)
+        self.bind_class(self._wheel_tag, "<Button-5>", self._on_wheel)
+        self.bind_class(self._pan_tag, "<ButtonPress-1>", self._on_pan_start)
+        self.bind_class(self._pan_tag, "<B1-Motion>", self._on_pan_move)
+        self.bind_class(self._pan_tag, "<ButtonRelease-1>", self._on_pan_end)
+        self._pan_active = False
+        self._pan_y = 0
+        self.bind_wheel_tree()
+
+    @classmethod
+    def _is_pannable(cls, widget):
+        return isinstance(widget, cls.PANNABLE)
+
+    def bind_wheel_tree(self):
+        """给本容器及所有后代挂上滚动支持；可重复调用，不会重复叠加绑定。"""
+        self._apply_tags(self)
+        self._on_configure(None)
+
+    def _apply_tags(self, widget):
+        tags = list(widget.bindtags())
+        if self._wheel_tag not in tags:
+            tags.append(self._wheel_tag)
+        if self._is_pannable(widget) and self._pan_tag not in tags:
+            tags.append(self._pan_tag)
+        widget.bindtags(tuple(tags))
+        for child in widget.winfo_children():
+            self._apply_tags(child)
+
+    def _scroll(self, units):
+        top, bottom = self.canvas.yview()
+        if (units < 0 and top <= 0) or (units > 0 and bottom >= 1):
+            return
+        self.canvas.yview_scroll(units, "units")
 
     def _on_wheel(self, event):
-        if getattr(event, "num", None) == 4 or getattr(event, "delta", 0) > 0:
-            self.canvas.yview_scroll(-3, "units")
-        elif getattr(event, "num", None) == 5 or getattr(event, "delta", 0) < 0:
-            self.canvas.yview_scroll(3, "units")
+        num = getattr(event, "num", None)
+        if num == 4:                       # Linux 向上
+            self._scroll(-3)
+        elif num == 5:                     # Linux 向下
+            self._scroll(3)
+        else:
+            delta = getattr(event, "delta", 0)
+            if not delta:
+                return "break"
+            # 鼠标滚轮通常 ±120；触控板/精密滚轮是多次小 delta（±1~±40），
+            # 按幅度自适应，避免触控板一次滑动跳过整屏。
+            step = max(1, min(5, int(abs(delta) / 40) or 1))
+            self._scroll(-step if delta > 0 else step)
+        return "break"
+
+    def _on_pan_start(self, event):
+        self._pan_active = True
+        self._pan_y = event.y_root
+
+    def _on_pan_move(self, event):
+        if not self._pan_active:
+            return
+        dy = event.y_root - self._pan_y
+        if abs(dy) < 3:
+            return
+        units = -int(dy / 6) or (-1 if dy > 0 else 1)
+        self._scroll(units)
+        self._pan_y = event.y_root
+        return "break"
+
+    def _on_pan_end(self, _event):
+        self._pan_active = False
 
     def _on_configure(self, _event):
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))

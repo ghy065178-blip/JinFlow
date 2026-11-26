@@ -55,13 +55,24 @@ def host_target():
 
 
 def make_version_file(work, version):
-    """由 packaging/version_info.txt 模板生成 Windows 版本资源。"""
+    """由 packaging/version_info.txt 模板生成 Windows 版本资源。
+
+    用正则替换，模板里的版本号可以是任意历史版本，不受硬编码字符串限制。
+    """
+    import re
     template = (ROOT / "packaging" / "version_info.txt").read_text(
         encoding="utf-8")
     parts = (version.split(".") + ["0", "0", "0", "0"])[:4]
     nums = [int(p) if p.isdigit() else 0 for p in parts]
-    text = template.replace("1, 0, 0, 0", ", ".join(str(n) for n in nums))
-    text = text.replace("1.0.0.0", version)
+    tuple_text = "(%s)" % ", ".join(str(n) for n in nums)
+    text = re.sub(r"(filevers=)\([^)]*\)",
+                  lambda m: m.group(1) + tuple_text, template)
+    text = re.sub(r"(prodvers=)\([^)]*\)",
+                  lambda m: m.group(1) + tuple_text, text)
+    text = re.sub(
+        r"(StringStruct\('(?:FileVersion|ProductVersion)', ')[^']*(')",
+        lambda m: m.group(1) + ".".join(str(n) for n in nums) + m.group(2),
+        text)
     out = work / "version_info.txt"
     out.write_text(text, encoding="utf-8")
     return out
