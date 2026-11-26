@@ -274,6 +274,7 @@ def plan_install(ctx, package, version):
                     "backup_path": str(_unique_path(
                         str(old) + ".backup-" + (ctx["current_version"] or "old"))),
                     "updates_root": str(updates_root),
+                    "pid": ctx.get("pid") or os.getpid(),
                     "payload_dir": package["payload_dir"],
                     "launch_path": str(old / (APP + ".exe")),
                     "version": version,
@@ -464,7 +465,7 @@ def _apply_windows_install(plan, relaunch, runner, pid):
 
 def apply_install(plan, relaunch=True, runner=None, pid=None):
     """执行安装计划；失败时回滚并抛 InstallError。runner 可注入便于测试。"""
-    pid = pid or os.getpid()
+    pid = pid or plan.get("pid") or os.getpid()
     mode = plan["mode"]
 
     if mode == "macos-app":
