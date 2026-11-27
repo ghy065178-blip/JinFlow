@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""历史版本独立升级助手（1.0.0～1.0.3 → 2.0.0），零第三方依赖。
+"""历史版本独立升级助手（1.0.0～2.0.0 → 2.1.0），零第三方依赖。
 
-2.0.0 已内置「帮助 → 检查更新与升级…」；但已发布的 1.0.x 冻结包里没有
+2.1.0 已内置「帮助 → 检查更新与升级…」；但已发布的 1.0.x 冻结包里没有
 更新代码，无法凭空获得应用内检查能力。本脚本作为发布资产
-`JinFlow-Upgrade-Helper.py` 随 2.0.0 一起提供，旧版用户只需用
-本机 Python 运行一次即可完成检测、下载、SHA256 校验与切换到 2.0.0。
+`JinFlow-Upgrade-Helper.py` 随 2.1.0 一起提供，旧版用户只需用
+本机 Python 运行一次即可完成检测、下载、SHA256 校验与切换到 2.1.0。
 
     python JinFlow-Upgrade-Helper.py --check
     python JinFlow-Upgrade-Helper.py --upgrade
@@ -70,7 +70,7 @@ def vkey(text):
 
 def fetch(url, timeout=20):
     req = urllib.request.Request(url, headers={
-        "User-Agent": "JinFlow-Upgrade-Helper/2.0.0",
+        "User-Agent": "JinFlow-Upgrade-Helper/2.1.0",
         "Cache-Control": "no-cache"})
     with urllib.request.urlopen(req, timeout=timeout,
                                 context=ssl.create_default_context()) as resp:
@@ -120,13 +120,13 @@ def asset_info(manifest, target):
     if name != "%s-%s.zip" % (PACKAGE_NAME, target):
         raise ValueError("最新版本没有可用的 %s 安装包" % target)
     base = str(manifest.get("download_base")
-               or (REPO + "/releases/download/%s/" % manifest.get("tag", "v2.0.0")))
+               or (REPO + "/releases/download/%s/" % manifest.get("tag", "v2.1.0")))
     return name, base.rstrip("/") + "/" + name, str(entry.get("sha256") or "")
 
 
 def checksums(manifest, name):
     base = str(manifest.get("download_base")
-               or (REPO + "/releases/download/%s/" % manifest.get("tag", "v2.0.0")))
+               or (REPO + "/releases/download/%s/" % manifest.get("tag", "v2.1.0")))
     url = base.rstrip("/") + "/" + str(manifest.get("checksums_asset")
                                        or "SHA256SUMS.txt")
     try:
@@ -367,7 +367,7 @@ def main(argv=None):
         archive = work / name
         with urllib.request.urlopen(
                 urllib.request.Request(url, headers={
-                    "User-Agent": "JinFlow-Upgrade-Helper/2.0.0"}),
+                    "User-Agent": "JinFlow-Upgrade-Helper/2.1.0"}),
                 timeout=60, context=ssl.create_default_context()) as resp, \
                 open(archive, "wb") as fp:
             shutil.copyfileobj(resp, fp)

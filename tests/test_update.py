@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""2.0.0 应用内检查更新与升级的回归测试（含本地 HTTP 端到端演练）。
+"""2.1.0 应用内检查更新与升级的回归测试（含本地 HTTP 端到端演练）。
 
-覆盖：三个以上历史版本 → 2.0.0、四平台资产选择、多通道容错、SHA256 校验、
+覆盖：历史版本到 2.1.0、四平台资产选择、多通道容错、SHA256 校验、
 安装/切换与回滚、界面与 CLI 入口、发布配置一致性。全部测试不依赖真实网络，
 使用合成清单与合成发布包。
 """
@@ -33,20 +33,20 @@ from jsj_desktop.update.errors import (ChannelError, ChecksumError,  # noqa: E40
                                        InstallError, ManifestError,
                                        UnsupportedPlatformError, UpdateError)
 
-LEGACY = ("1.0.0", "1.0.1", "1.0.2", "1.0.3")
+LEGACY = ("1.0.0", "1.0.1", "1.0.2", "1.0.3", "2.0.0")
 TARGET = "macos-arm64"
 BUILD_VERSION = vmod.package_version(__version__, __release_revision__)
 
 
-def synthetic_manifest(download_base="https://example.invalid/v2.0.0/"):
+def synthetic_manifest(download_base="https://example.invalid/v2.1.0/"):
     data = json.loads((ROOT / "update" / "latest.json").read_text(
         encoding="utf-8"))
     data["download_base"] = download_base
-    data.update(latest_version="2.0.0", upgrade_target="2.0.0", release_revision=0)
+    data.update(latest_version="2.1.0", upgrade_target="2.1.0", release_revision=0)
     return mf.validate_manifest(data)
 
 
-def synthetic_package_bytes(version="2.0.0", target=TARGET):
+def synthetic_package_bytes(version="2.1.0", target=TARGET):
     """构造与真实发布包同结构的合成 zip。"""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -90,11 +90,11 @@ def fake_ctx(mode="source", system="macos", target=TARGET, data_dir="/tmp/x"):
 class VersionCompatibilityTest(unittest.TestCase):
     def test_every_legacy_version_upgrades_to_130(self):
         for old in LEGACY:
-            plan = vmod.upgrade_plan(old, "2.0.0")
+            plan = vmod.upgrade_plan(old, "2.1.0")
             self.assertTrue(plan["update_available"], old)
             self.assertTrue(plan["supported"], old)
             self.assertTrue(plan["is_legacy"], old)
-            self.assertEqual(plan["latest"], "2.0.0")
+            self.assertEqual(plan["latest"], "2.1.0")
             self.assertEqual(plan["path"], "direct")
 
     def test_tag_prefix_and_four_part_windows_version(self):
@@ -157,7 +157,7 @@ class ManifestTest(unittest.TestCase):
     def test_bundled_manifest_is_valid(self):
         data = mf.local_manifest()
         self.assertEqual(data["schema"], mf.MANIFEST_SCHEMA)
-        self.assertEqual(data["product_version"], "2.0.0")
+        self.assertEqual(data["product_version"], "2.1.0")
         self.assertEqual(data["checksums_asset"], "SHA256SUMS.txt")
 
     def test_all_four_platform_assets_resolve(self):
@@ -167,6 +167,14 @@ class ManifestTest(unittest.TestCase):
             self.assertEqual(asset["name"], mf.asset_names(target)["zip"])
             self.assertTrue(asset["url"].startswith("https://"))
         self.assertIn("dmg", mf.asset_names("macos-arm64"))
+
+    def test_macos_dmg_asset_resolves_with_its_checksum_field(self):
+        data = synthetic_manifest()
+        data["assets"]["macos-arm64"]["dmg_sha256"] = "a" * 64
+        asset = mf.select_asset(data, "macos-arm64", "dmg")
+        self.assertEqual(asset["name"], "JinFlow-macos-arm64.dmg")
+        self.assertEqual(asset["kind"], "dmg")
+        self.assertEqual(asset["sha256"], "a" * 64)
 
     def test_unsupported_platform_raises(self):
         with self.assertRaises(UnsupportedPlatformError):
@@ -190,7 +198,7 @@ class ManifestTest(unittest.TestCase):
 
     def test_manifest_normalizes_release_revision(self):
         data = mf.validate_manifest(dict(synthetic_manifest(),
-                                         latest_version="2.0.0.3", upgrade_target="2.0.0.3",
+                                         latest_version="2.1.0.3", upgrade_target="2.1.0.3",
                                          release_revision="3"))
         self.assertEqual(data["release_revision"], 3)
 
@@ -200,14 +208,14 @@ class ManifestTest(unittest.TestCase):
                 mf.validate_manifest(dict(synthetic_manifest(), release_revision=value))
 
     def test_github_api_release_is_normalized(self):
-        payload = {"tag_name": "v2.0.0", "body": "notes",
+        payload = {"tag_name": "v2.1.0", "body": "notes",
                    "html_url": "https://example.invalid/release",
                    "assets": [{"name": "JinFlow-%s.zip" % t,
                                "browser_download_url":
                                "https://example.invalid/%s.zip" % t}
                               for t in mf.TARGETS]}
         data = mf.normalize_github_release(payload)
-        self.assertEqual(data["latest_version"], "2.0.0")
+        self.assertEqual(data["latest_version"], "2.1.0")
         self.assertIn("macos-arm64", data["assets"])
         self.assertIn("JinFlow-macos-arm64.zip", data["urls"])
 
@@ -227,7 +235,7 @@ class ClientTest(unittest.TestCase):
         published = mf.local_manifest()
         self.assertEqual(published["latest_version"], BUILD_VERSION)
         self.assertEqual(published["upgrade_target"], BUILD_VERSION)
-        self.assertEqual(published["tag"], "v2.0.0")
+        self.assertEqual(published["tag"], "v2.1.0")
         self.assertTrue(vmod.is_newer(published["latest_version"], "2.0.0"))
         online = client.ReleaseInfo(mf.validate_manifest(published), "release-asset")
         checked = client.check_for_update(target=TARGET, info=online)
@@ -288,7 +296,7 @@ class ClientTest(unittest.TestCase):
                 .encode("utf-8")
 
         info = client.fetch_latest(fetcher=fetcher)
-        self.assertEqual(info.version, "2.0.0")
+        self.assertEqual(info.version, "2.1.0")
         self.assertFalse(info.offline)
 
     def test_all_sources_fail_falls_back_to_bundled_offline(self):
@@ -298,7 +306,7 @@ class ClientTest(unittest.TestCase):
         info = client.fetch_latest(fetcher=fetcher)
         self.assertTrue(info.offline)
         self.assertEqual(info.source, "bundled")
-        self.assertEqual(info.version, "2.0.0")
+        self.assertEqual(info.version, "2.1.0")
         self.assertTrue(info.errors)
 
     def test_all_sources_and_bundle_fail_raises_channel_error(self):
@@ -317,12 +325,20 @@ class ClientTest(unittest.TestCase):
                                              info=info)
             self.assertTrue(result.ok, old)
             self.assertEqual(result.current_version, old)
-            self.assertEqual(result.latest_version, "2.0.0")
+            self.assertEqual(result.latest_version, "2.1.0")
             self.assertTrue(result.update_available)
             self.assertTrue(result.is_legacy)
             self.assertTrue(result.can_update)
             self.assertEqual(result.asset["name"],
                              "JinFlow-macos-arm64.zip")
+
+    def test_dmg_selection_uses_the_same_checked_release(self):
+        info = client.ReleaseInfo(synthetic_manifest(), "test")
+        result = client.check_for_update(current_version="2.0.0", target=TARGET,
+                                         info=info, asset_kind="dmg")
+        self.assertTrue(result.can_update)
+        self.assertEqual(result.asset_kind, "dmg")
+        self.assertEqual(result.asset["name"], "JinFlow-macos-arm64.dmg")
 
     def test_offline_info_disallows_auto_install(self):
         info = client.ReleaseInfo(synthetic_manifest(), "bundled", offline=True)
@@ -431,12 +447,34 @@ class InstallerTest(unittest.TestCase):
                 installer.extract_zip(io.BytesIO(buf.getvalue()),
                                       Path(tmp) / "out")
 
+    def test_extract_dmg_copies_app_and_detaches_mount(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = root / "JinFlow-macos-arm64.dmg"
+            archive.write_bytes(b"synthetic dmg")
+            calls = []
+
+            def runner(command, **_kwargs):
+                calls.append(command)
+                if command[0:2] == ["hdiutil", "attach"]:
+                    mount = Path(command[command.index("-mountpoint") + 1])
+                    executable = mount / "JinFlow.app" / "Contents" / "MacOS"
+                    executable.mkdir(parents=True)
+                    (executable / "JinshujuDesktop").write_text("app")
+
+            with patch.object(installer.sys, "platform", "darwin"):
+                out = installer.extract_dmg(archive, root / "out", runner=runner)
+            self.assertTrue((out / "JinFlow.app" / "Contents" / "MacOS" /
+                             "JinshujuDesktop").is_file())
+            self.assertEqual(calls[0][:2], ["hdiutil", "attach"])
+            self.assertEqual(calls[-1][:2], ["hdiutil", "detach"])
+
     def test_validate_package_accepts_correct_version_and_target(self):
         buf = io.BytesIO(synthetic_package_bytes())
         with tempfile.TemporaryDirectory() as tmp:
             root = installer.extract_zip(buf, Path(tmp) / "pkg")
-            pkg = installer.validate_package(root, TARGET, "2.0.0")
-            self.assertEqual(pkg["version"], "2.0.0")
+            pkg = installer.validate_package(root, TARGET, "2.1.0")
+            self.assertEqual(pkg["version"], "2.1.0")
             self.assertTrue(Path(pkg["launch_path"]).is_file())
 
     def test_validate_package_rejects_wrong_version(self):
@@ -444,26 +482,26 @@ class InstallerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = installer.extract_zip(buf, Path(tmp) / "pkg")
             with self.assertRaises(InstallError):
-                installer.validate_package(root, TARGET, "2.0.0")
+                installer.validate_package(root, TARGET, "2.1.0")
 
     def test_validate_package_rejects_wrong_architecture(self):
         buf = io.BytesIO(synthetic_package_bytes(target="macos-x86_64"))
         with tempfile.TemporaryDirectory() as tmp:
             root = installer.extract_zip(buf, Path(tmp) / "pkg")
             with self.assertRaises(InstallError):
-                installer.validate_package(root, TARGET, "2.0.0")
+                installer.validate_package(root, TARGET, "2.1.0")
 
     def _package(self, tmp):
         root = installer.extract_zip(io.BytesIO(synthetic_package_bytes()),
                                      Path(tmp) / "pkg")
-        return installer.validate_package(root, TARGET, "2.0.0")
+        return installer.validate_package(root, TARGET, "2.1.0")
 
     def test_plan_install_macos_keeps_backup(self):
         with tempfile.TemporaryDirectory() as tmp:
             ctx = fake_ctx("macos-app", data_dir=tmp)
             ctx["app_bundle"] = str(Path(tmp) / "install" / "JinshujuDesktop.app")
             Path(ctx["app_bundle"]).mkdir(parents=True)
-            plan = installer.plan_install(ctx, self._package(tmp), "2.0.0")
+            plan = installer.plan_install(ctx, self._package(tmp), "2.1.0")
             self.assertEqual(plan["mode"], "macos-app")
             self.assertIn("backup-1.0.3", plan["backup_path"])
             self.assertTrue(plan["can_auto"])
@@ -474,7 +512,7 @@ class InstallerTest(unittest.TestCase):
                            target="windows-x86_64", data_dir=tmp)
             ctx["install_root"] = str(Path(tmp) / "install" / "JinshujuDesktop")
             Path(ctx["install_root"]).mkdir(parents=True)
-            plan = installer.plan_install(ctx, self._package(tmp), "2.0.0")
+            plan = installer.plan_install(ctx, self._package(tmp), "2.1.0")
             self.assertEqual(plan["mode"], "windows-dir")
             self.assertEqual(Path(plan["updates_root"]), Path(tmp) / "updates")
 
@@ -485,16 +523,16 @@ class InstallerTest(unittest.TestCase):
             ctx = fake_ctx("windows-dir", system="windows",
                            target="windows-x86_64", data_dir=str(old / "data"))
             ctx["install_root"] = str(old)
-            plan = installer.plan_install(ctx, self._package(tmp), "2.0.0")
+            plan = installer.plan_install(ctx, self._package(tmp), "2.1.0")
             self.assertEqual(plan["mode"], "staged")
             self.assertTrue(Path(plan["target_path"]).is_relative_to(old / "data"))
 
     def test_plan_install_source_mode_is_staged(self):
         with tempfile.TemporaryDirectory() as tmp:
             plan = installer.plan_install(fake_ctx(data_dir=tmp),
-                                          self._package(tmp), "2.0.0")
+                                          self._package(tmp), "2.1.0")
             self.assertEqual(plan["mode"], "staged")
-            self.assertIn("updates/2.0.0", plan["target_path"].replace("\\", "/"))
+            self.assertIn("updates/2.1.0", plan["target_path"].replace("\\", "/"))
             self.assertEqual(Path(plan["target_path"]).name, "JinFlow.app")
             # platform_label() 返回 macos/windows/linux，不能与 sys.platform 混用
             self.assertTrue(plan["can_auto"])
@@ -502,7 +540,7 @@ class InstallerTest(unittest.TestCase):
 
     def test_macos_repeated_staging_keeps_bundle_name_and_existing_copy(self):
         with tempfile.TemporaryDirectory() as tmp:
-            plan = installer.plan_install(fake_ctx(data_dir=tmp), self._package(tmp), "2.0.0")
+            plan = installer.plan_install(fake_ctx(data_dir=tmp), self._package(tmp), "2.1.0")
             first = installer.apply_install(plan, relaunch=False)
             launch_calls = []
             second = installer.apply_install(
@@ -719,7 +757,7 @@ class EndToEndUpdateTest(unittest.TestCase):
         for old in LEGACY:
             result = self._check(old)
             self.assertTrue(result.ok, old)
-            self.assertEqual(result.latest_version, "2.0.0")
+            self.assertEqual(result.latest_version, "2.1.0")
             self.assertTrue(result.update_available)
             self.assertTrue(result.can_update)
             self.assertEqual(result.asset["name"], self.asset)
@@ -739,12 +777,12 @@ class EndToEndUpdateTest(unittest.TestCase):
                                                runner=lambda *a, **k: None)
             self.assertTrue(outcome["ok"])
             self.assertFalse(outcome.get("noop", False))
-            self.assertEqual(outcome["latest_version"], "2.0.0")
+            self.assertEqual(outcome["latest_version"], "2.1.0")
             self.assertEqual(outcome["target"], TARGET)
             self.assertEqual(outcome["checksum_source"], "SHA256SUMS.txt")
             marker = Path(outcome["installed_to"]) / "Contents" / "APP_VERSION.txt"
             self.assertTrue(marker.is_file())
-            self.assertIn("2.0.0", marker.read_text(encoding="utf-8"))
+            self.assertIn("2.1.0", marker.read_text(encoding="utf-8"))
             self.assertEqual(cfg.read_text(encoding="utf-8"), before)
 
     def test_replace_same_product_version_uses_build_marker(self):
@@ -758,7 +796,7 @@ class EndToEndUpdateTest(unittest.TestCase):
             progress = []
             outcome = service.apply_update(check=check, relaunch=False,
                                            progress=lambda stage, *_: progress.append(stage))
-            self.assertEqual(outcome["latest_version"], "2.0.0")
+            self.assertEqual(outcome["latest_version"], "2.1.0")
             self.assertEqual(outcome["latest_revision"], __release_revision__)
             self.assertIn(BUILD_VERSION, outcome["installed_to"])
             for stage in ("download", "verify", "install", "done"):
@@ -781,7 +819,7 @@ class EndToEndUpdateTest(unittest.TestCase):
             self._fill(self.package, self.digest)
 
     def test_noop_when_already_130(self):
-        result = service.check_for_update(current_version="2.0.0", current_revision=0,
+        result = service.check_for_update(current_version="2.1.0", current_revision=0,
                                          target=TARGET, sources=self._sources())
         with patch.object(mf, "channel_sources", return_value=self._sources()):
             outcome = service.apply_update(check=result, relaunch=False,
@@ -795,8 +833,8 @@ class EndToEndUpdateTest(unittest.TestCase):
         proc = run_py([sys.executable, "-m", "jsj_desktop", "--check-update"],
                       env=env)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertIn("最新版本   : 2.0.0", proc.stdout)
-        self.assertIn("当前版本   : 2.0.0", proc.stdout)
+        self.assertIn("最新版本   : 2.1.0", proc.stdout)
+        self.assertIn("当前版本   : 2.1.0", proc.stdout)
 
     def test_legacy_helper_checks_all_old_versions(self):
         helper = ROOT / "tools" / "upgrade_legacy.py"
@@ -823,11 +861,11 @@ class EndToEndUpdateTest(unittest.TestCase):
                  "--manifest-url", self.base + "latest.json"],
                 env=env, timeout=120)
             self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-            self.assertIn("已切换到 v2.0.0", proc.stdout)
-            marker = (Path(tmp) / "data" / "updates" / "2.0.0" /
+            self.assertIn("已切换到 v2.1.0", proc.stdout)
+            marker = (Path(tmp) / "data" / "updates" / "2.1.0" /
                       "JinFlow.app" / "Contents" / "APP_VERSION.txt")
             self.assertTrue(marker.is_file())
-            self.assertIn("2.0.0", marker.read_text(encoding="utf-8"))
+            self.assertIn("2.1.0", marker.read_text(encoding="utf-8"))
 
     @unittest.skipUnless(sys.platform in ("darwin", "win32"), "需要官方发布目标")
     def test_legacy_helper_can_repair_the_existing_release_without_a_version_bump(self):
@@ -841,7 +879,7 @@ class EndToEndUpdateTest(unittest.TestCase):
             old = root / ("JinshujuDesktop.app" if sys.platform == "darwin"
                           else "JinshujuDesktop")
             old.mkdir()
-            (old / "APP_VERSION.txt").write_text("2.0.0\n")
+            (old / "APP_VERSION.txt").write_text("2.1.0\n")
             (old / "original").write_text("release build")
             if sys.platform == "win32":
                 (old / "JinshujuDesktop.exe").write_text("original executable")
@@ -859,7 +897,7 @@ class EndToEndUpdateTest(unittest.TestCase):
             repaired = run_py([*args, "--repair"], env=env)
             self.assertEqual(repaired.returncode, 0, repaired.stdout + repaired.stderr)
             self.assertFalse((old / "original").exists())
-            self.assertTrue((Path(str(old) + ".backup-2.0.0") / "original").exists())
+            self.assertTrue((Path(str(old) + ".backup-2.1.0") / "original").exists())
             self.assertEqual(data.read_text(), "{}")
 
     @unittest.skipUnless(sys.platform in ("darwin", "win32"), "需要官方发布目标")
@@ -871,7 +909,7 @@ class EndToEndUpdateTest(unittest.TestCase):
             old = Path(tmp) / ("JinshujuDesktop.app" if sys.platform == "darwin"
                                else "JinshujuDesktop")
             old.mkdir()
-            (old / "APP_VERSION.txt").write_text("2.0.0\n")
+            (old / "APP_VERSION.txt").write_text("2.1.0\n")
             if sys.platform == "win32":
                 (old / "JinshujuDesktop.exe").write_text("original executable")
             proc = run_py([sys.executable, str(ROOT / "tools/upgrade_legacy.py"),
@@ -880,19 +918,19 @@ class EndToEndUpdateTest(unittest.TestCase):
                           env={"JSJ_DATA_DIR": str(Path(tmp) / "user-data")})
             self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
             self.assertIn("SHA256 校验失败", proc.stderr)
-            self.assertEqual((old / "APP_VERSION.txt").read_text(), "2.0.0\n")
+            self.assertEqual((old / "APP_VERSION.txt").read_text(), "2.1.0\n")
 
 
 class ReleaseConfigTest(unittest.TestCase):
-    def test_version_number_is_200_everywhere(self):
-        self.assertEqual(__version__, "2.0.0")
+    def test_version_number_is_210_everywhere(self):
+        self.assertEqual(__version__, "2.1.0")
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-        self.assertIn('version = "2.0.0"', pyproject)
+        self.assertIn('version = "2.1.0"', pyproject)
         version_info = (ROOT / "packaging" / "version_info.txt").read_text(
             encoding="utf-8")
-        self.assertIn("(2, 0, 0, 0)", version_info)
-        self.assertIn("'2.0.0.0'", version_info)
-        self.assertEqual(mf.local_manifest()["product_version"], "2.0.0")
+        self.assertIn("(2, 1, 0, 0)", version_info)
+        self.assertIn("'2.1.0.0'", version_info)
+        self.assertEqual(mf.local_manifest()["product_version"], "2.1.0")
         self.assertEqual(mf.local_manifest()["latest_version"], BUILD_VERSION)
 
     def test_pyproject_urls_point_to_real_repository(self):

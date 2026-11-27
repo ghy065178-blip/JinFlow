@@ -1,21 +1,22 @@
 {
   "schema": 1,
   "channel": "JinFlow/stable",
-  "latest_version": "2.0.0.3",
-  "release_revision": 3,
-  "tag": "v2.0.0",
+  "latest_version": "2.1.0",
+  "release_revision": 0,
+  "tag": "v2.1.0",
   "release_date": "2026-11-27",
-  "notes": "JinFlow 2.0.0 修订 3。\nmacOS 安装包中的应用统一命名为 JinFlow.app。已有安装可在退出后于 Finder 改名。\n本版提供液态玻璃风格、高清图标、可调左栏及应用内更新，并优化 Windows 窗口切换。",
+  "notes": "JinFlow 2.1.0。macOS 支持在应用内选择 ZIP 或 DMG 下载并更新，修复黑色主题下控件对比度与状态显示，合并跨平台窗口重绘并优化滚动、分隔线拖动和日志渲染。",
   "min_supported_version": "1.0.0",
-  "upgrade_target": "2.0.0.3",
-  "legacy_versions": ["1.0.0", "1.0.1", "1.0.2", "1.0.3"],
+  "upgrade_target": "2.1.0",
+  "legacy_versions": ["1.0.0", "1.0.1", "1.0.2", "1.0.3", "2.0.0"],
   "legacy_upgrade_paths": {
-    "1.0.0": {"tag": "v1.0.0", "upgrade_to": "2.0.0.3", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"},
-    "1.0.1": {"tag": "v1.0.1", "upgrade_to": "2.0.0.3", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"},
-    "1.0.2": {"tag": "v1.0.2", "upgrade_to": "2.0.0.3", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"},
-    "1.0.3": {"tag": "v1.0.3", "upgrade_to": "2.0.0.3", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"}
+    "1.0.0": {"tag": "v1.0.0", "upgrade_to": "2.1.0", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"},
+    "1.0.1": {"tag": "v1.0.1", "upgrade_to": "2.1.0", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"},
+    "1.0.2": {"tag": "v1.0.2", "upgrade_to": "2.1.0", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"},
+    "1.0.3": {"tag": "v1.0.3", "upgrade_to": "2.1.0", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"},
+    "2.0.0": {"tag": "v2.0.0", "upgrade_to": "2.1.0", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"}
   },
-  "download_base": "https://github.com/ghy065178-blip/JinFlow/releases/download/v2.0.0/",
+  "download_base": "https://github.com/ghy065178-blip/JinFlow/releases/download/v2.1.0/",
   "checksums_asset": "SHA256SUMS.txt",
   "manual_url": "https://github.com/ghy065178-blip/JinFlow/releases/latest",
   "assets": {

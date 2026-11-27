@@ -36,7 +36,7 @@
 ```bash
 python packaging/build.py                     # 自动识别当前系统/架构
 python packaging/build.py --target macos-arm64 --sign-identity "Developer ID Application: ..."
-python packaging/build.py --target windows-x86_64 --version 2.0.0
+python packaging/build.py --target windows-x86_64 --version 2.1.0
 ```
 
 `build.py` 会：
@@ -138,8 +138,8 @@ git push origin v1.0.0
 
 ## 8. 版本与变更
 
-- 产品版本为 **2.0.0**，发布修订为 **3**。源码、Python 包元数据和标签记录产品版本。
-  冻结包的 `APP_VERSION.txt` 首行与更新清单记录构建号 `2.0.0.3`，供已发布客户端比较和校验。
+- 产品版本为 **2.1.0**，发布修订为 **0**。源码、Python 包元数据和标签记录产品版本。
+  冻结包的 `APP_VERSION.txt` 首行与更新清单记录构建号 `2.1.0`，供已发布客户端比较和校验。
   `APP_VERSION.txt` 的 `Version:` 行提供新版界面使用的产品版本。发布前运行 `tools/check_update_channel.py --offline` 校验版本配置。
 - 任何涉及 `core/` 业务逻辑的改动，都必须保证 `tests/test_legacy_parity.py` 与
   `tests/test_mapping.py` 继续通过；1.2.0 只新增 `update/` 与界面附加入口，

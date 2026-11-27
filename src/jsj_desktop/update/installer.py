@@ -158,6 +158,43 @@ def extract_zip(archive, dest):
     return dest
 
 
+def extract_dmg(archive, dest, runner=None):
+    """挂载 DMG、复制其中的 .app 并卸载，返回可校验的本地目录。"""
+    if sys.platform != "darwin":
+        raise InstallError("DMG 更新包只能在 macOS 上安装。",
+                           hint="请在 macOS 设备上选择 DMG，或下载 ZIP 包。")
+    runner = runner or subprocess.run
+    dest = Path(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    mount = Path(tempfile.mkdtemp(prefix="jinflow-dmg-mount-"))
+    attached = False
+    try:
+        runner(["hdiutil", "attach", "-nobrowse", "-readonly",
+                "-mountpoint", str(mount), str(archive)], check=True,
+               stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        attached = True
+        apps = sorted(path for path in mount.glob("*.app") if path.is_dir())
+        if not apps:
+            raise InstallError("DMG 中未找到可安装的 JinFlow.app。",
+                               hint="请重新下载完整的 DMG 安装包。")
+        shutil.copytree(apps[0], dest / apps[0].name, symlinks=True)
+        return dest
+    except InstallError:
+        raise
+    except Exception as e:
+        raise InstallError("挂载或读取 DMG 失败：%s" % e,
+                           hint="请确认 macOS 磁盘映像可正常打开后重试。", cause=e)
+    finally:
+        if attached:
+            try:
+                runner(["hdiutil", "detach", "-force", str(mount)],
+                       check=False, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+        shutil.rmtree(mount, ignore_errors=True)
+
+
 def _find_build_info(root):
     for rel in ("BUILD_INFO.txt", APP + "/BUILD_INFO.txt",
                 (APP + ".app") + "/Contents/BUILD_INFO.txt"):

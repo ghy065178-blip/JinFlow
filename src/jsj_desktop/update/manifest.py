@@ -2,7 +2,7 @@
 """版本无关的更新通道：清单格式、GitHub Releases 适配与平台资产选择。
 
 通道设计要点：
-  * 静态清单 update/latest.json 是权威来源，不含个人信息，旧版本与 2.0.0
+  * 静态清单 update/latest.json 是权威来源，不含个人信息，旧版本与 2.1.0
     使用同一格式；GitHub Releases API 作为交叉校验来源，取两者中版本号更高者；
   * 任一来源失败不影响其它来源（例如 API 触发匿名限流）；全部失败才回退到
     随包内置清单，并明确标记 offline，禁止基于离线信息自动安装；
@@ -224,9 +224,11 @@ def asset_url(info, name):
     if url:
         return url
     for entry in (info.get("assets") or {}).values():
-        if isinstance(entry, dict) and entry.get("url") and \
-                entry.get("zip") == name:
-            return entry["url"]
+        if not isinstance(entry, dict):
+            continue
+        for kind in ("zip", "dmg"):
+            if entry.get("url") and entry.get(kind) == name:
+                return entry["url"]
     return info["download_base"].rstrip("/") + "/" + name
 
 
@@ -235,24 +237,41 @@ def checksums_url(info):
     return asset_url(info, name)
 
 
-def select_asset(info, target):
-    """返回当前平台可自动安装的 zip 资产（含 URL 与可选 sha256）。"""
+def select_asset(info, target, kind="zip"):
+    """返回当前平台指定格式的可安装资产。"""
     if target not in TARGETS:
         raise UnsupportedPlatformError("未知发布目标：%s" % target)
-    entry = (info.get("assets") or {}).get(target)
-    if not isinstance(entry, dict) or not entry.get("zip"):
+    names = asset_names(target)
+    if kind not in names:
         raise AssetError(
-            "最新版本 %s 尚未提供 %s 平台的安装包。"
-            % (info.get("latest_version", "?"), target),
+            "%s 平台不支持 %s 更新包。" % (target, kind.upper()),
+            hint="请改用该平台提供的安装包格式。")
+    entry = (info.get("assets") or {}).get(target)
+    if not isinstance(entry, dict) or not entry.get(kind):
+        raise AssetError(
+            "最新版本 %s 尚未提供 %s 平台的 %s 安装包。"
+            % (info.get("latest_version", "?"), target, kind.upper()),
             hint="请稍后重试，或在 Releases 页面手动下载对应系统的包。")
-    name = entry["zip"]
+    name = entry[kind]
+    checksum_key = "sha256" if kind == "zip" else "%s_sha256" % kind
     asset = {"name": name, "url": asset_url(info, name),
-             "sha256": str(entry.get("sha256") or ""),
-             "size": entry.get("size") or 0, "kind": "zip"}
-    if target.startswith("macos") and entry.get("dmg"):
-        asset["manual_name"] = entry["dmg"]
-        asset["manual_url"] = asset_url(info, entry["dmg"])
+             "sha256": str(entry.get(checksum_key) or ""),
+             "size": entry.get("%s_size" % kind) or 0,
+             "kind": kind}
+    for alternate in names:
+        if alternate != kind and entry.get(alternate):
+            asset["alternate_name"] = entry[alternate]
+            asset["alternate_url"] = asset_url(info, entry[alternate])
+            break
     return asset
+
+
+def available_assets(info, target):
+    """返回当前平台清单中实际可用的 ZIP/DMG 资产。"""
+    return {kind: select_asset(info, target, kind)
+            for kind in asset_names(target)
+            if isinstance((info.get("assets") or {}).get(target), dict)
+            and (info.get("assets") or {}).get(target, {}).get(kind)}
 
 
 def channel_sources():

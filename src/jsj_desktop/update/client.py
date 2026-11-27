@@ -160,8 +160,8 @@ def fetch_latest(sources=None, fetcher=None, timeout=DEFAULT_TIMEOUT):
 
 def check_for_update(current_version=None, target=None, info=None,
                      timeout=DEFAULT_TIMEOUT, fetcher=None, sources=None, *,
-                     current_revision=None):
-    """返回 CheckResult：当前版本、最新版本、是否可升级、资产与失败原因。"""
+                     current_revision=None, asset_kind="zip"):
+    """返回 CheckResult：当前版本、最新版本、资产与可用更新格式。"""
     current = current_version or __version__
     if current_revision is None:
         current_revision = __release_revision__ if current == __version__ else 0
@@ -174,22 +174,31 @@ def check_for_update(current_version=None, target=None, info=None,
         except UpdateError as e:
             # Linux 等没有官方二进制包的平台仍可正常显示版本信息
             tgt, asset_error = "unsupported", e.user_message()
+        kind = str(asset_kind or "zip").lower()
+        if kind not in ("zip", "dmg"):
+            kind = "zip"
+        available_assets = {}
+        if not asset_error:
+            try:
+                available_assets = mf.available_assets(info.manifest, tgt)
+            except AssetError as e:
+                asset_error = e.user_message()
         plan = vmod.upgrade_plan(
             current, info.version,
             info.manifest.get("min_supported_version",
                               vmod.MIN_UPGRADEABLE_VERSION),
             current_revision=current_revision, latest_revision=info.revision)
         if asset is None and not asset_error:
-            try:
-                asset = mf.select_asset(info.manifest, tgt)
-            except AssetError as e:
-                asset_error = e.user_message()
+            asset = available_assets.get(kind)
+            if asset is None:
+                asset_error = ("最新版本尚未提供 %s 更新包。" % kind.upper())
         try:
             matching_tag = vmod.normalize_version(info.tag) == info.version
         except ValueError:
             matching_tag = False
-        can_update = bool(plan["update_available"] and plan["supported"] and asset
-                          and matching_tag and not info.offline)
+        update_eligible = bool(plan["update_available"] and plan["supported"]
+                               and matching_tag and not info.offline)
+        can_update = bool(update_eligible and asset)
         reason = plan["reason"]
         if info.offline and plan["update_available"]:
             reason = ("无法连接更新通道，当前只显示随包内置的版本信息；"
@@ -211,6 +220,8 @@ def check_for_update(current_version=None, target=None, info=None,
             asset_error=asset_error, info=info, notes=info.notes,
             source=info.source, offline=info.offline,
             channel_errors=list(info.errors), manual_url=info.manual_url,
+            assets=available_assets, asset_kind=kind,
+            update_eligible=update_eligible,
             can_update=can_update, reason=reason)
     except UpdateError as e:
         return CheckResult(
@@ -220,7 +231,8 @@ def check_for_update(current_version=None, target=None, info=None,
             is_legacy=False, target=str(target or ""), asset=None,
             info=None, notes="", source="", offline=False,
             channel_errors=[e.message], manual_url=mf.RELEASE_PAGE,
-            error=e, reason=e.user_message())
+            assets={}, asset_kind=str(asset_kind or "zip"),
+            update_eligible=False, error=e, reason=e.user_message())
     except Exception as e:  # noqa: BLE001 - 界面不能因为未预期异常崩溃
         wrapped = NetworkError("检查更新时出现未预期错误：%s" % e, cause=e)
         return CheckResult(
@@ -230,7 +242,25 @@ def check_for_update(current_version=None, target=None, info=None,
             is_legacy=False, target=str(target or ""), asset=None,
             info=None, notes="", source="", offline=False,
             channel_errors=[wrapped.message], manual_url=mf.RELEASE_PAGE,
-            error=wrapped, reason=wrapped.user_message())
+            assets={}, asset_kind=str(asset_kind or "zip"),
+            update_eligible=False, error=wrapped, reason=wrapped.user_message())
+
+
+def select_asset(check, kind):
+    """在已完成版本检查的结果中切换下载格式，不重复访问网络。"""
+    kind = str(kind or "zip").lower()
+    assets = getattr(check, "assets", {}) or {}
+    asset = assets.get(kind)
+    data = check.as_dict()
+    data["asset_kind"] = kind
+    data["asset"] = asset
+    data["asset_error"] = "" if asset else "%s 更新包不可用。" % kind.upper()
+    eligible = getattr(check, "update_eligible", check.update_available and
+                        check.supported and not check.offline)
+    data["can_update"] = bool(eligible and asset)
+    if not asset and check.update_available:
+        data["reason"] = data["asset_error"]
+    return CheckResult(**data)
 
 
 def download_file(url, dest, progress=None, timeout=DOWNLOAD_TIMEOUT,

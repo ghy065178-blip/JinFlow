@@ -17,7 +17,7 @@
 | 日志脱敏显示 | 关 | 实时日志 / `settings.json` |
 | 界面主题 | 跟随系统 | 「设置与关于」/ `settings.json` 的 `theme_mode` |
 | 启动时自动检查更新 | 开 | 「设置与关于」/ `settings.json` 的 `check_update_on_startup`（1.2.0） |
-| 最新版本 / 升级目标 | `2.0.0` | `update/latest.json`（只读发布通道） |
+| 最新版本 / 升级目标 | `2.1.0` | `update/latest.json`（只读发布通道） |
 | 北京时间时区 | `Asia/Shanghai`（缺少时区库时 UTC+8） | `core/constants.py` |
 | User-Agent | 与旧脚本一致 | `core/constants.py` |
 

@@ -20,8 +20,8 @@ def check_for_update(**kwargs):
 
 
 def prepare_update(check, progress=None, work_dir=None, fetcher=None,
-                   opener=None):
-    """下载并验证发布包，返回可直接安装的结构；失败时删除临时文件。"""
+                   opener=None, installer_runner=None):
+    """下载并验证指定格式的发布包，返回可直接安装的结构。"""
     progress = progress or _noop
     if not check.ok:
         raise check.error or UpdateError("检查更新失败。")
@@ -51,9 +51,13 @@ def prepare_update(check, progress=None, work_dir=None, fetcher=None,
                              progress=on_progress, opener=opener)
         progress("verify", 82, "正在校验下载文件…")
         client.verify_download(archive, checksum["sha256"])
-        progress("extract", 86, "正在解包…")
+        progress("extract", 86, "正在%s…" %
+                 ("挂载 DMG" if check.asset.get("kind") == "dmg" else "解包"))
         root = work / "package"
-        installer.extract_zip(archive, root)
+        if check.asset.get("kind") == "dmg":
+            installer.extract_dmg(archive, root, runner=installer_runner)
+        else:
+            installer.extract_zip(archive, root)
         progress("validate", 92, "正在核对版本与平台…")
         package = installer.validate_package(root, check.target,
                                              check.package_version)
@@ -68,11 +72,15 @@ def prepare_update(check, progress=None, work_dir=None, fetcher=None,
 
 def apply_update(check=None, progress=None, relaunch=True, runner=None,
                  work_dir=None, fetcher=None, opener=None, sources=None,
-                 info=None, **check_kwargs):
+                 info=None, asset_kind=None, installer_runner=None,
+                 **check_kwargs):
     """执行完整升级；返回结构化结果，或抛出 UpdateError 子类。"""
     progress = progress or _noop
     check = check or check_for_update(fetcher=fetcher, sources=sources,
-                                      info=info, **check_kwargs)
+                                      info=info, asset_kind=asset_kind or "zip",
+                                      **check_kwargs)
+    if asset_kind and getattr(check, "asset_kind", "zip") != asset_kind:
+        check = client.select_asset(check, asset_kind)
     if not check.ok:
         raise check.error or UpdateError("检查更新失败。")
     if not check.update_available:
@@ -84,7 +92,8 @@ def apply_update(check=None, progress=None, relaunch=True, runner=None,
     try:
         prepared = prepare_update(check, progress=progress,
                                   work_dir=work_dir, fetcher=fetcher,
-                                  opener=opener)
+                                  opener=opener,
+                                  installer_runner=installer_runner)
         ctx = installer.install_context()
         plan = installer.plan_install(ctx, prepared["package"],
                                       check.package_version)

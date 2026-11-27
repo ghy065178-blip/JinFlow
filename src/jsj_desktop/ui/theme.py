@@ -365,10 +365,20 @@ def apply(root, mode="system", system_mode=None):
     style.configure("TCheckbutton", background=p["bg"], foreground=p["text"],
                     font=(family, 10), indicatorforeground=p["text"],
                     indicatorbackground=p["input"])
-    style.map("TCheckbutton", indicatorbackground=[("selected", p["selected"]),
-                                                    ("pressed", p["highlight"])])
+    check_map = {
+        "indicatorbackground": [("selected", p["action"]),
+                                ("pressed", p["highlight"]),
+                                ("active", p["highlight"])],
+        "indicatorforeground": [("selected", p["on_action"]),
+                                ("pressed", p["text"])],
+        "foreground": [("disabled", p["dim"]), ("active", p["text"])],
+    }
+    style.map("TCheckbutton", **check_map)
     style.configure("Card.TCheckbutton", background=p["glass"],
-                    foreground=p["text"], font=(family, 10))
+                    foreground=p["text"], font=(family, 10),
+                    indicatorforeground=p["text"],
+                    indicatorbackground=p["input"])
+    style.map("Card.TCheckbutton", **check_map)
     style.configure("Head.TCheckbutton", background=p["surface2"],
                     foreground=p["text"], font=(family, 10))
     style.configure("Theme.TRadiobutton", background=p["glass"],

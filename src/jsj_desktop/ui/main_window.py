@@ -94,8 +94,9 @@ class MainWindow(Tk):
         self.autoscroll_var.set(bool(saved.get("auto_scroll", True)))
         self.update_var.set(bool(saved.get("check_update_on_startup", True)))
         self.protocol("WM_DELETE_WINDOW", self.close)
+        # 所有支持的桌面系统都合并窗口尺寸事件，避免原生重排与状态重绘互相抢占。
+        self.bind("<Configure>", self._on_window_configure, add="+")
         if sys.platform == "win32":
-            self.bind("<Configure>", self._on_window_configure, add="+")
             self.bind("<F11>", self._toggle_fullscreen)
             self.bind("<Escape>", self._leave_fullscreen)
         self._poll_after = self.after(80, self._poll)
@@ -253,8 +254,8 @@ class MainWindow(Tk):
         main = ttk.Frame(self)
         main.pack(fill=BOTH, expand=True, padx=20, pady=(0, 16))
         self.main_pane = tk.PanedWindow(
-            main, orient=tk.HORIZONTAL, borderwidth=0, sashwidth=7,
-            sashrelief="flat", opaqueresize=True, background=PALETTE["border"])
+            main, orient=tk.HORIZONTAL, borderwidth=0, sashwidth=8,
+            sashrelief="flat", opaqueresize=False, background=PALETTE["border"])
         self.main_pane.pack(fill=BOTH, expand=True)
         self.left_scroll = ScrollableFrame(self.main_pane)
         self.term_frame = ttk.Frame(self.main_pane)
@@ -1015,9 +1016,8 @@ class MainWindow(Tk):
 
     def _append_log(self, item):
         self.log_view.append(item.get("ts", ""), item.get("level", "info"),
-                             item.get("text", ""), mask=self.mask_var.get())
-        if self.autoscroll_var.get():
-            self.log_view.see(END)
+                             item.get("text", ""), mask=self.mask_var.get(),
+                             scroll=self.autoscroll_var.get())
 
     def _render_preview(self, payload):
         self.preview_tree.delete(*self.preview_tree.get_children())

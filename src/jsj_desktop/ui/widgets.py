@@ -219,7 +219,7 @@ class LogView(tk.Text):
             self.tag_configure("lv-" + level, foreground=color)
         self.tag_configure("ts", foreground=PALETTE["log_ts"])
 
-    def append(self, ts, level, text, mask=False):
+    def append(self, ts, level, text, mask=False, scroll=True):
         shown = mask_text(text) if mask else text
         self._lines.append("%s  %s" % (ts, shown))
         if len(self._lines) > 3000:
@@ -230,7 +230,8 @@ class LogView(tk.Text):
         self.insert("end", ts + "  ", "ts")
         self.insert("end", shown + "\n", "lv-" + (level if level in self.LEVELS else "info"))
         self.configure(state="disabled")
-        self.see("end")
+        if scroll:
+            self.see("end")
 
     def clear(self):
         self._lines.clear()

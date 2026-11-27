@@ -160,7 +160,7 @@ class UpdateBannerTest(unittest.TestCase):
 
     def test_failed_install_reports_error_and_keeps_update_available(self):
         window = self._open_window(check_update_on_startup=False)
-        result = service.check_for_update(info=client.ReleaseInfo(
+        result = service.check_for_update(current_version="2.0.0", info=client.ReleaseInfo(
             manifest.local_manifest(), "release-asset"), current_revision=0)
         window._show_update_banner(result)
         window.update_banner.invoke()

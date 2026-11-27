@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 """应用内更新面板。后台线程执行下载和安装，主线程反馈进度。"""
 import queue
+import sys
 import threading
 import tkinter as tk
 from tkinter import BOTH, LEFT, RIGHT, X, Y, StringVar, messagebox, ttk
 
 from .. import __release_revision__, __version__
-from ..update import service
+from ..update import client, service
 from ..update.errors import UpdateError
 from .theme import PALETTE, font_family
 
@@ -44,6 +45,8 @@ class UpdateDialog(tk.Toplevel):
         self.state_var = StringVar(value="尚未检查更新")
         self.platform_var = StringVar(value="—")
         self.channel_var = StringVar(value="—")
+        self.asset_format_var = tk.StringVar(value="zip")
+        self.format_hint_var = StringVar(value="")
         self.progress_var = StringVar(value="等待操作")
 
         self._build()
@@ -78,6 +81,24 @@ class UpdateDialog(tk.Toplevel):
             ttk.Label(grid, textvariable=var, style="Card.TLabel",
                       wraplength=440, justify=LEFT) \
                 .grid(row=i, column=1, sticky="w", pady=2)
+        ttk.Label(grid, text="下载格式", style="CardKey.TLabel", width=12) \
+            .grid(row=5, column=0, sticky="nw", pady=(7, 2))
+        self.format_frame = ttk.Frame(grid, style="Card.TFrame")
+        self.format_frame.grid(row=5, column=1, sticky="w", pady=(4, 0))
+        self.format_zip = ttk.Radiobutton(
+            self.format_frame, text="ZIP（应用内更新）", value="zip",
+            variable=self.asset_format_var, style="Theme.TRadiobutton",
+            command=self._on_format_changed)
+        self.format_zip.pack(side=LEFT, padx=(0, 14))
+        self.format_dmg = ttk.Radiobutton(
+            self.format_frame, text="DMG（挂载后更新）", value="dmg",
+            variable=self.asset_format_var, style="Theme.TRadiobutton",
+            command=self._on_format_changed,
+            state="normal" if sys.platform == "darwin" else "disabled")
+        self.format_dmg.pack(side=LEFT)
+        ttk.Label(grid, textvariable=self.format_hint_var,
+                  style="CardHint.TLabel").grid(row=6, column=1,
+                                                  sticky="w", pady=(0, 2))
         grid.columnconfigure(1, weight=1)
 
         note_box = ttk.LabelFrame(self, text="版本说明", padding=8)
@@ -113,6 +134,40 @@ class UpdateDialog(tk.Toplevel):
                                    command=self.copy_link)
         self.copy_btn.pack(side=LEFT)
         ttk.Button(bar, text="关闭", command=self._hide).pack(side=RIGHT)
+
+    def _sync_asset_controls(self, result):
+        """按当前平台和清单同步 ZIP/DMG 选择，保持版本结果只检查一次。"""
+        assets = getattr(result, "assets", {}) or {}
+        target = str(getattr(result, "target", "") or "")
+        is_macos = target.startswith("macos") or sys.platform == "darwin"
+        has_zip = "zip" in assets
+        has_dmg = is_macos and "dmg" in assets
+        self.format_zip.configure(state="normal" if has_zip else "disabled")
+        self.format_dmg.configure(state="normal" if has_dmg else "disabled")
+        requested = str(getattr(result, "asset_kind", "zip") or "zip")
+        if requested not in assets or (requested == "dmg" and not has_dmg):
+            requested = "zip" if has_zip else ("dmg" if has_dmg else "zip")
+        self.asset_format_var.set(requested)
+        if requested != getattr(result, "asset_kind", "zip"):
+            result = client.select_asset(result, requested)
+        if has_dmg:
+            self.format_hint_var.set("ZIP 直接解压更新，DMG 会挂载并替换应用。")
+        elif has_zip:
+            self.format_hint_var.set("当前平台提供 ZIP 更新包。")
+        else:
+            self.format_hint_var.set("当前发布未提供可用的自动更新包。")
+        return result
+
+    def _on_format_changed(self):
+        if self.busy or not self.check:
+            return
+        selected = self.asset_format_var.get()
+        result = client.select_asset(self.check, selected)
+        self.check = result
+        self.parent._show_update_banner(result)
+        self.state_var.set(result.reason)
+        self.progress_var.set(result.reason)
+        self._set_busy(False)
 
     # -------------------- 线程与事件 --------------------
     def _drain(self):
@@ -173,6 +228,7 @@ class UpdateDialog(tk.Toplevel):
         threading.Thread(target=work, daemon=True).start()
 
     def _on_checked(self, result):
+        result = self._sync_asset_controls(result)
         self.check = result
         self.parent._show_update_banner(result)
         self.latest_var.set(version_label(result.latest_version, result.latest_revision)
