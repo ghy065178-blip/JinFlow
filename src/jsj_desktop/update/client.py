@@ -175,9 +175,10 @@ def check_for_update(current_version=None, target=None, info=None,
             # Linux 等没有官方二进制包的平台仍可正常显示版本信息
             tgt, asset_error = "unsupported", e.user_message()
         plan = vmod.upgrade_plan(
-            vmod.package_version(current, current_revision), info.package_version,
+            current, info.version,
             info.manifest.get("min_supported_version",
-                              vmod.MIN_UPGRADEABLE_VERSION))
+                              vmod.MIN_UPGRADEABLE_VERSION),
+            current_revision=current_revision, latest_revision=info.revision)
         if asset is None and not asset_error:
             try:
                 asset = mf.select_asset(info.manifest, tgt)
@@ -190,9 +191,6 @@ def check_for_update(current_version=None, target=None, info=None,
         can_update = bool(plan["update_available"] and plan["supported"] and asset
                           and matching_tag and not info.offline)
         reason = plan["reason"]
-        if (info.revision and current == info.version and
-                current_revision == info.revision):
-            reason = "当前已是最新版本 %s（修订 %d）。" % (info.version, info.revision)
         if info.offline and plan["update_available"]:
             reason = ("无法连接更新通道，当前只显示随包内置的版本信息；"
                       "为避免安装过期版本，请手动下载或联网后重试。")

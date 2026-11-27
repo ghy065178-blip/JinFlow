@@ -135,7 +135,8 @@ def upgrade_plan(current, latest, min_supported=MIN_UPGRADEABLE_VERSION,
                              % (latest_revision, current_revision))
         return result
     if comparison == 0:
-        result["reason"] = "当前已是最新版本 %s。" % new
+        result["reason"] = "当前已是最新版本 %s%s。" % (
+            new, "（修订 %d）" % latest_revision if latest_revision else "")
         return result
     result["update_available"] = True
     result["is_legacy"] = is_legacy(cur, new) or cur in LEGACY_VERSIONS

@@ -19,7 +19,9 @@ class WindowTransitionTest(unittest.TestCase):
         window._window_transition_after = None
         window._poll_after = None
         window._toast_after = None
-        window.tk = Mock()
+        window._update_result_after = None
+        window._startup_update_after = None
+        window._closed = False
         window.after = Mock(side_effect=("first", "last", "poll"))
         window.after_cancel = Mock()
         window._render_task_tabs = Mock()
@@ -46,6 +48,7 @@ class WindowTransitionTest(unittest.TestCase):
         window._window_transition_after = "resize"
         window.event_queue = queue.Queue()
         window.active_task = "t1"
+        window._manual_update_check = False
         window.manager = Mock()
         window._update_buttons = Mock()
         window.event_queue.put(("state", "t1", {"attempt": 42}))

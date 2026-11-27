@@ -1,23 +1,29 @@
 # -*- coding: utf-8 -*-
-"""「帮助 → 检查更新与升级…」弹窗（1.2.0 新增，不占主界面）。
-
-沿用主窗口同一套深色主题；网络与安装都在后台线程执行，Tk 控件只由主线程
-通过 queue + after() 更新。任何失败都用 messagebox 明确提示原因与处理建议，
-并保持当前版本与报名数据不变。
-"""
+"""应用内更新面板。后台线程执行下载和安装，主线程反馈进度。"""
 import queue
 import threading
 import tkinter as tk
 from tkinter import BOTH, LEFT, RIGHT, X, Y, StringVar, messagebox, ttk
 
-from .. import __version__
+from .. import __release_revision__, __version__
 from ..update import service
 from ..update.errors import UpdateError
 from .theme import PALETTE, font_family
 
 
+PROGRESS_LABELS = {
+    "checksum": "正在获取校验信息…", "download": "正在下载…",
+    "verify": "正在验证下载…", "extract": "正在解包…",
+    "validate": "正在核对安装包…", "install": "正在安装…",
+}
+
+
+def version_label(version, revision):
+    return "%s（修订 %d）" % (version, revision) if revision else version
+
+
 class UpdateDialog(tk.Toplevel):
-    def __init__(self, parent):
+    def __init__(self, parent, result=None):
         super().__init__(parent)
         self.parent = parent
         self.title("检查更新与升级")
@@ -29,21 +35,21 @@ class UpdateDialog(tk.Toplevel):
 
         self.events = queue.Queue()
         self.busy = False
+        self.installing = False
         self.check = None
-        self._alive = True
+        self._drain_after = None
 
-        self.cur_var = StringVar(value=__version__)
+        self.cur_var = StringVar(value=version_label(__version__, __release_revision__))
         self.latest_var = StringVar(value="尚未检查")
         self.state_var = StringVar(value="尚未检查更新")
         self.platform_var = StringVar(value="—")
         self.channel_var = StringVar(value="—")
         self.progress_var = StringVar(value="等待操作")
-        self.progress = None
 
         self._build()
         self.protocol("WM_DELETE_WINDOW", self._hide)
-        self.after(80, self._drain)
-        self.after(250, self.start_check)
+        self._drain_after = self.after(80, self._drain)
+        self.show(result)
 
     def retheme(self):
         """刷新更新说明文本的直接 tkinter 颜色，控件顺序保持不变。"""
@@ -77,6 +83,7 @@ class UpdateDialog(tk.Toplevel):
         note_box = ttk.LabelFrame(self, text="版本说明", padding=8)
         note_box.pack(fill=BOTH, expand=True, padx=16, pady=(0, 8))
         self.notes = tk.Text(note_box, height=8, wrap="word",
+                             state="disabled",
                              bg=PALETTE["surface2"], fg=PALETTE["text"],
                              insertbackground=PALETTE["text"],
                              font=(font_family(), 10), relief="flat",
@@ -109,8 +116,7 @@ class UpdateDialog(tk.Toplevel):
 
     # -------------------- 线程与事件 --------------------
     def _drain(self):
-        if not self._alive:
-            return
+        self._drain_after = None
         try:
             while True:
                 kind, payload = self.events.get_nowait()
@@ -120,13 +126,25 @@ class UpdateDialog(tk.Toplevel):
                     stage, pct, text = payload
                     self.bar["value"] = pct
                     self.progress_var.set(text)
+                    if stage in PROGRESS_LABELS:
+                        self.state_var.set(PROGRESS_LABELS[stage])
                 elif kind == "done":
                     self._on_done(payload)
+                    if payload.get("pending") or payload.get("launched"):
+                        return
+                elif kind == "check_failed":
+                    self.parent._show_update_banner(None)
+                    self._on_failed(payload)
                 elif kind == "failed":
                     self._on_failed(payload)
         except queue.Empty:
             pass
-        self.after(100, self._drain)
+        self._drain_after = self.after(80, self._drain)
+
+    def destroy(self):
+        if self._drain_after is not None:
+            self.after_cancel(self._drain_after)
+        super().destroy()
 
     def _set_busy(self, value):
         self.busy = value
@@ -139,6 +157,7 @@ class UpdateDialog(tk.Toplevel):
     def start_check(self):
         if self.busy:
             return
+        self.check = None
         self._set_busy(True)
         self.bar["value"] = 0
         self.progress_var.set("正在检查最新版本…")
@@ -148,14 +167,16 @@ class UpdateDialog(tk.Toplevel):
             try:
                 self.events.put(("checked", service.check_for_update()))
             except Exception as e:  # noqa: BLE001
-                self.events.put(("failed", UpdateError(
+                self.events.put(("check_failed", UpdateError(
                     "检查更新时出现未预期错误：%s" % e, cause=e)))
 
         threading.Thread(target=work, daemon=True).start()
 
     def _on_checked(self, result):
         self.check = result
-        self.latest_var.set(result.latest_version or "获取失败")
+        self.parent._show_update_banner(result)
+        self.latest_var.set(version_label(result.latest_version, result.latest_revision)
+                            if result.latest_version else "获取失败")
         self.platform_var.set(result.target or "—")
         self.channel_var.set(
             "%s%s" % (result.source or "不可用",
@@ -167,7 +188,7 @@ class UpdateDialog(tk.Toplevel):
         self.bar["value"] = 100 if result.ok else 0
         self.progress_var.set(result.reason)
         self.state_var.set(result.reason)
-        self.cur_var.set(result.current_version)
+        self.cur_var.set(version_label(result.current_version, result.current_revision))
 
         if not result.ok:
             self._set_busy(False)
@@ -175,9 +196,9 @@ class UpdateDialog(tk.Toplevel):
             messagebox.showerror("检查更新失败", result.reason, parent=self)
             return
         if result.update_available and result.can_update:
-            self.update_btn.configure(text="立即更新到 v%s" % result.latest_version)
+            self.update_btn.configure(text="立即更新")
         elif result.update_available:
-            self.update_btn.configure(text="暂不可自动升级")
+            self.update_btn.configure(text="暂不可更新")
         else:
             self.update_btn.configure(text="已是最新版本")
         self._set_busy(False)
@@ -208,10 +229,7 @@ class UpdateDialog(tk.Toplevel):
     def start_update(self):
         if self.busy or not self.check or not self.check.can_update:
             return
-        try:
-            running = [t for t in self.parent.manager.list() if t.get("running")]
-        except Exception:
-            running = []
+        running = [t for t in self.parent.manager.list() if t.get("running")]
         if running:
             messagebox.showerror(
                 "更新失败",
@@ -224,19 +242,22 @@ class UpdateDialog(tk.Toplevel):
             "· 当前版本会先备份，失败自动恢复；\n"
             "· 报名信息、档案与任务配置不会被修改；\n"
             "· 安装完成后程序会自动退出并启动新版本。\n\n继续？"
-            % self.check.latest_version, parent=self)
+            % version_label(self.check.latest_version, self.check.latest_revision), parent=self)
         if not ok:
             return
+        self.installing = True
         self._set_busy(True)
         self.bar["value"] = 0
-        self.state_var.set("正在升级…")
+        self.state_var.set("正在准备更新…")
+        self.progress_var.set("正在获取校验信息…")
+        check = self.check
 
         def progress(stage, pct, text):
             self.events.put(("progress", (stage, pct, text)))
 
         def work():
             try:
-                result = service.apply_update(check=self.check,
+                result = service.apply_update(check=check,
                                               progress=progress,
                                               relaunch=True)
                 self.events.put(("done", result))
@@ -251,26 +272,38 @@ class UpdateDialog(tk.Toplevel):
         threading.Thread(target=work, daemon=True).start()
 
     def _on_done(self, result):
-        self._set_busy(False)
-        self.bar["value"] = 100
-        self.state_var.set("升级完成")
         self.progress_var.set(result["message"])
-        self._toast("已升级到 v%s" % result["latest_version"], "ok")
+        self.parent._show_update_banner(None)
+        if result.get("pending"):
+            self.state_var.set("正在安装…")
+            self.update_idletasks()
+            self.installing = False
+            self.parent.close()
+            return
+        self.check = None
+        self._set_busy(False)
+        self.update_btn.configure(text="已完成")
+        self.bar["value"] = 100
+        self.state_var.set("更新成功")
+        label = version_label(result["latest_version"], result.get("latest_revision", 0))
+        self._toast("已更新到 v%s" % label, "ok")
         messagebox.showinfo(
-            "升级完成",
+            "更新成功",
             "%s\n\n目标版本：v%s\n校验来源：%s\n安装位置：%s\n%s"
-            % (result["message"], result["latest_version"],
+            % (result["message"], label,
                result.get("checksum_source", "-"),
                result.get("installed_to", "-"),
                "程序即将退出并启动新版本。" if result.get("launched") else
                "请手动打开上述目录中的新版程序。"), parent=self)
+        self.installing = False
         if result.get("launched"):
-            self.after(400, self.parent.close)
+            self.parent.close()
 
     def _on_failed(self, error):
+        self.installing = False
         self._set_busy(False)
         self.bar["value"] = 0
-        self.state_var.set("更新失败（当前版本保持不变）")
+        self.state_var.set("更新失败")
         self.progress_var.set(error.message)
         self._toast("更新失败：" + error.message[:40], "err")
         messagebox.showerror("更新失败", error.user_message(), parent=self)
@@ -295,10 +328,14 @@ class UpdateDialog(tk.Toplevel):
             pass
 
     def _hide(self):
-        self.withdraw()
+        if not self.installing:
+            self.withdraw()
 
-    def show(self):
+    def show(self, result=None):
         self.deiconify()
         self.lift()
-        if not self.busy and self.check is None:
-            self.start_check()
+        if not self.busy:
+            if result is not None:
+                self._on_checked(result)
+            else:
+                self.start_check()

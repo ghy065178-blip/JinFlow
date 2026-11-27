@@ -9,7 +9,7 @@
     toast（右下角浮动提示）
 差异只在实现机制：本地 HTTP + SSE + 子进程 stdout 抓取 → 原生窗口 +
 线程安全事件队列 + 结构化应答。附加的高级设置/预览/迁移入口放在菜单与弹窗。
-启动检查发现新版本时，在顶部显示可点击的发布页入口。
+启动检查发现新版本时，在顶部显示应用内更新入口。
 """
 import json
 import os
@@ -18,22 +18,18 @@ import subprocess
 import sys
 import threading
 import time
-import webbrowser
 from datetime import datetime
 from pathlib import Path
 import tkinter as tk
 from tkinter import (BOTH, END, LEFT, RIGHT, X, Y, BooleanVar, StringVar,
                      Tk, filedialog, messagebox, simpledialog, ttk)
-from urllib.parse import quote
 
-from .. import __app_name__, __version__
+from .. import __app_name__, __release_revision__, __version__
 from ..core.constants import (CONFIG_LINK_KEY, CST, MAX_TASKS,
                               format_beijing_time, now_beijing)
 from ..core.rules import is_visible
 from ..data import paths as data_paths
 from ..tasks.manager import TaskManager
-from ..update.manifest import REPO_URL
-from ..update.version import normalize_version
 from .theme import (PALETTE, apply as apply_theme, detect_system_mode,
                     font_family, normalize_mode, refresh_tree)
 from .widgets import LogView, ScrollableFrame, StatusCard
@@ -51,6 +47,9 @@ class MainWindow(Tk):
         self._window_transition_after = None
         self._poll_after = None
         self._toast_after = None
+        self._update_result_after = None
+        self._startup_update_after = None
+        self._closed = False
         self.title("JinFlow")
         self.geometry("1360x860")
         self.minsize(1080, 700)
@@ -81,6 +80,8 @@ class MainWindow(Tk):
         self._last_theme_probe = 0.0
         self._tab_sig = None
         self._task_buttons_map = {}
+        self._available_update = None
+        self._manual_update_check = False
 
         self._build_menu()
         self._build_header()
@@ -100,7 +101,9 @@ class MainWindow(Tk):
         self._poll_after = self.after(80, self._poll)
         self._init_task(replay=True)
         if self.update_var.get():
-            self.after_idle(self._auto_check_update)
+            self._startup_update_after = self.after_idle(self._auto_check_update)
+        if sys.platform == "win32":
+            self._report_update_result()
 
     # ==================== 通用小组件 ====================
     def _panel(self, parent, title, tag=""):
@@ -151,15 +154,11 @@ class MainWindow(Tk):
         top = ttk.Frame(self, style="Header.TFrame", padding=(12, 8))
         top.pack(fill=X, padx=20, pady=(10, 10))
         self.header = top
-        ttk.Style(self).configure("Update.Primary.TButton", focuscolor="#042f2e")
-        self.update_banner = ttk.Button(self, style="Update.Primary.TButton",
-                                        takefocus=True, cursor="hand2")
 
         def activate_banner(_event):
             self.update_banner.invoke()
             return "break"
 
-        self.update_banner.bind("<Return>", activate_banner)
         self._brand_icon = None
         try:
             scaling = self.winfo_fpixels("1i") / (72 if sys.platform == "darwin" else 96)
@@ -206,6 +205,10 @@ class MainWindow(Tk):
                 command=lambda selected=value: self._set_header_theme(selected))
             button.pack(side=LEFT, padx=1)
             self.header_theme_widgets[value] = button
+        self.update_banner = ttk.Button(
+            top, text="更新", style="Update.Primary.TButton", takefocus=True,
+            cursor="hand2", command=self._open_available_update)
+        self.update_banner.bind("<Return>", activate_banner)
 
     def _build_taskbar(self):
         inner = ttk.Frame(self, style="Glass.TFrame", padding=(12, 8))
@@ -643,7 +646,8 @@ class MainWindow(Tk):
             while time.monotonic() < deadline:
                 kind, tid, payload = self.event_queue.get_nowait()
                 if kind == "startup_update":
-                    self._show_update_banner(payload)
+                    if not self._manual_update_check:
+                        self._show_update_banner(payload)
                     continue
                 self.manager.apply_event(kind, tid, payload)
                 self._handle_event(kind, tid, payload)
@@ -666,7 +670,7 @@ class MainWindow(Tk):
             if system_mode != self.system_mode:
                 self.system_mode = system_mode
                 self._apply_theme(persist=False)
-        if self.tk.call("winfo", "exists", self._w):
+        if not self._closed:
             self._poll_after = self.after(delay, self._poll)
 
     def _handle_event(self, kind, tid, payload):
@@ -1196,6 +1200,10 @@ class MainWindow(Tk):
 
     # ==================== 启动 / 停止 ====================
     def _start(self, dry):
+        dialog = getattr(self, "update_window", None)
+        if dialog is not None and dialog.installing:
+            self._toast("请等待更新完成后启动任务", "warn")
+            return
         if not self._save_config(True):
             self._toast("配置保存失败，已取消启动", "err")
             return
@@ -1612,15 +1620,19 @@ class MainWindow(Tk):
             "· 详情见 docs/PRIVACY.md。"))
 
     # -------------------- 应用内检查更新 --------------------
-    def _show_update(self):
-        """「帮助 → 检查更新与升级…」：独立弹窗，主界面布局与功能保持不变。"""
+    def _open_available_update(self):
+        self._show_update(self._available_update)
+
+    def _show_update(self, result=None):
+        """从帮助菜单或顶部更新按钮打开更新面板。"""
         try:
             from .update_dialog import UpdateDialog
+            self._manual_update_check = True
             win = getattr(self, "update_window", None)
             if win is not None and win.winfo_exists():
-                win.show()
+                win.show(result)
             else:
-                self.update_window = UpdateDialog(self)
+                self.update_window = UpdateDialog(self, result)
         except Exception as e:
             self._toast("无法打开更新窗口：%s" % e, "err")
 
@@ -1633,6 +1645,7 @@ class MainWindow(Tk):
 
     def _auto_check_update(self):
         """后台检查更新，由主线程消费结果。"""
+        self._startup_update_after = None
         events = self.event_queue
 
         def work():
@@ -1644,24 +1657,41 @@ class MainWindow(Tk):
         threading.Thread(target=work, daemon=True).start()
 
     def _show_update_banner(self, result):
-        if not result.ok or result.offline or not result.update_available:
-            return
+        self._available_update = result if result and result.can_update else None
+        if self._available_update:
+            self.update_banner.pack(side=LEFT, padx=(8, 0))
+        else:
+            self.update_banner.pack_forget()
+
+    def _report_update_result(self):
+        log = os.environ.pop("JSJ_UPDATE_RESULT_LOG", "")
+        failure = os.environ.pop("JSJ_UPDATE_FAILURE_LOG", "")
+        if failure:
+            self._update_result_after = self.after_idle(
+                messagebox.showerror, "更新失败", "已重新启动原版本。安装日志：\n" + failure)
+        elif log:
+            self._confirm_update_result(Path(log), time.monotonic() + 10)
+
+    def _confirm_update_result(self, log, deadline):
+        self._update_result_after = None
         try:
-            if normalize_version(result.tag) != result.latest_version:
-                return
-        except ValueError:
-            return
-        url = REPO_URL + "/releases/tag/" + quote(result.tag, safe="")
-        self.update_banner.configure(
-            text="发现新版本 v%s · 打开 GitHub 发布页" % result.latest_version,
-            command=lambda: webbrowser.open_new_tab(url))
-        self.update_banner.pack(after=self.header, fill=X, padx=20, pady=(0, 10))
+            entries = log.read_text(encoding="utf-8-sig")
+        except OSError:
+            entries = ""
+        if " Installed. Backup:" in entries:
+            self._toast("更新成功，已启动 v%s" % __version__, "ok")
+        elif time.monotonic() < deadline:
+            self._update_result_after = self.after(250, self._confirm_update_result, log, deadline)
 
     def _about(self):
         messagebox.showinfo("关于", "%s · 桌面版 v%s\n\n%s" %
                             (__app_name__, __version__, self.env_text))
 
     def close(self):
+        dialog = getattr(self, "update_window", None)
+        if dialog is not None and dialog.installing:
+            dialog.lift()
+            return
         try:
             self.manager.stop_all()
             self._save_ui()
@@ -1670,7 +1700,10 @@ class MainWindow(Tk):
         self.destroy()
 
     def destroy(self):
-        for timer in (self._window_transition_after, self._poll_after, self._toast_after):
+        self._closed = True
+        for timer in (self._window_transition_after, self._poll_after,
+                      self._toast_after, self._update_result_after,
+                      self._startup_update_after):
             if timer is not None:
                 self.after_cancel(timer)
         super().destroy()

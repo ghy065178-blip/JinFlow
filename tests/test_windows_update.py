@@ -26,6 +26,8 @@ class Fixture {
         string flavor = File.ReadAllText("flavor.txt");
         if (args.Length == 0) {
             string log = Environment.GetEnvironmentVariable("JSJ_UPDATE_FAILURE_LOG");
+            if (string.IsNullOrEmpty(log))
+                log = Environment.GetEnvironmentVariable("JSJ_UPDATE_RESULT_LOG");
             File.WriteAllText(Path.Combine(control, "restarted"), flavor + "\n" + log);
             return flavor == "broken" ? 7 : 0;
         }
@@ -143,7 +145,9 @@ class WindowsHandoffTest(unittest.TestCase):
         result, status = self._run_update("new")
         log = Path(result["log"]).read_text(encoding="utf-8-sig")
         self.assertEqual(status, 0, log)
-        self.assertEqual((self.root / "restarted").read_text().strip(), "new")
+        new, log_path = (self.root / "restarted").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(new, "new")
+        self.assertEqual(log_path, result["log"])
         self.assertEqual((self.old / "_internal/locked.dll").read_bytes(), b"new runtime")
         self.assertEqual((Path(result["backup"]) / "_internal/locked.dll").read_bytes(),
                          b"old runtime")

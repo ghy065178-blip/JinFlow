@@ -255,7 +255,8 @@ def plan_install(ctx, package, version):
     mode = ctx["mode"]
     if mode == "macos-app":
         old = Path(ctx["app_bundle"])
-        if old.parent.exists() and os.access(str(old.parent), os.W_OK):
+        if (not updates_root.resolve().is_relative_to(old.resolve()) and
+                old.parent.exists() and os.access(str(old.parent), os.W_OK)):
             return {"ok": True, "mode": "macos-app", "can_auto": True,
                     "target_path": str(old),
                     "backup_path": str(_unique_path(
@@ -347,6 +348,8 @@ function Open-App {
     if ($env:JSJ_UPDATE_FAILURE_LOG) {
         $start.EnvironmentVariables['JSJ_UPDATE_FAILURE_LOG'] =
             $env:JSJ_UPDATE_FAILURE_LOG
+    } else {
+        $start.EnvironmentVariables['JSJ_UPDATE_RESULT_LOG'] = $log
     }
     [Diagnostics.Process]::Start($start)
 }
@@ -519,29 +522,33 @@ def apply_install(plan, relaunch=True, runner=None, pid=None):
         backup = Path(plan["backup_path"])
         new_app = Path(plan["new_app"])
         moved_old = False
+        replaced = False
         try:
             if old.exists() or old.is_symlink():
                 shutil.move(str(old), str(backup))
                 moved_old = True
             shutil.move(str(new_app), str(old))
+            replaced = True
+            if not (old / "Contents" / "MacOS" / APP).is_file():
+                raise InstallError("新版本包结构不完整。")
+            _best_effort(["codesign", "--force", "--deep", "--sign", "-", str(old)],
+                         runner)
+            _best_effort(["xattr", "-dr", "com.apple.quarantine", str(old)], runner)
+            if relaunch:
+                runner(["open", "-n", str(old)], check=True)
         except Exception as e:
-            if moved_old and backup.exists() and not old.exists():
-                shutil.move(str(backup), str(old))
+            try:
+                if replaced or (moved_old and old.exists()):
+                    shutil.rmtree(old)
+                if moved_old:
+                    shutil.move(str(backup), str(old))
+            except OSError as restore_error:
+                raise InstallError("恢复原版本失败：%s" % restore_error,
+                                   hint="原程序备份位于 %s" % backup,
+                                   cause=restore_error) from e
             raise InstallError("替换应用失败：%s" % e,
                                hint="现有版本已保留，请重试或手动拖入「应用程序」。",
-                               cause=e)
-        new_launch = old / "Contents" / "MacOS" / APP
-        if not new_launch.is_file():
-            shutil.rmtree(str(old), ignore_errors=True)
-            if moved_old and backup.exists():
-                shutil.move(str(backup), str(old))
-            raise InstallError("新版本包结构不完整，已恢复原版本。",
-                               hint="请重新下载完整发布包后重试。")
-        _best_effort(["codesign", "--force", "--deep", "--sign", "-", str(old)],
-                     runner)
-        _best_effort(["xattr", "-dr", "com.apple.quarantine", str(old)], runner)
-        if relaunch:
-            _popen(["open", "-n", str(old)], runner)
+                               cause=e) from e
         return {"ok": True, "mode": mode, "installed_to": str(old),
                 "backup": str(backup) if moved_old else "",
                 "launched": bool(relaunch),
@@ -551,26 +558,31 @@ def apply_install(plan, relaunch=True, runner=None, pid=None):
         return _apply_windows_install(plan, relaunch, runner or subprocess.Popen, pid)
 
     # 源码运行 / 无写入权限 / 手动模式
-    dest = Path(plan["target_path"])
+    dest = _unique_path(plan["target_path"])
     try:
-        if dest.exists():
-            shutil.rmtree(str(dest))
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(plan["payload_dir"], str(dest), symlinks=True)
+        dest.mkdir(parents=True)
     except Exception as e:
         raise InstallError("切换到新版本失败：%s" % e,
                            hint="现有版本与报名数据未改动，请检查写入权限。",
                            cause=e)
     launched = False
-    if relaunch and plan.get("can_auto"):
-        launch = Path(plan["launch_path"])
-        if launch.is_file():
+    try:
+        shutil.copytree(plan["payload_dir"], dest, symlinks=True, dirs_exist_ok=True)
+        if relaunch and plan.get("can_auto"):
+            rel_launch = Path(plan["launch_path"]).relative_to(plan["target_path"])
+            launch = dest / rel_launch
             if sys.platform == "win32":
                 _windows_popen([str(launch)], runner or subprocess.Popen,
                                cwd=str(launch.parent))
             else:
                 _popen([str(launch)], runner or subprocess.Popen)
             launched = True
+    except Exception as e:
+        shutil.rmtree(dest, ignore_errors=True)
+        if isinstance(e, InstallError):
+            raise
+        raise InstallError("切换到新版本失败：%s" % e,
+                           hint="现有版本与报名数据仍可使用。", cause=e) from e
     return {"ok": True, "mode": "staged", "installed_to": str(dest),
             "backup": "", "launched": launched,
             "message": plan["note"]}

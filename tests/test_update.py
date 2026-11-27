@@ -540,6 +540,25 @@ class InstallerTest(unittest.TestCase):
             self.assertTrue(old.exists())
             self.assertEqual((old / "marker").read_text(), "old")
 
+    def test_macos_relaunch_failure_restores_previous_app(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old, new = (root / name / "JinshujuDesktop.app" for name in ("old", "new"))
+            for app, content in ((old, "previous"), (new, "replacement")):
+                exe = app / "Contents" / "MacOS" / "JinshujuDesktop"
+                exe.parent.mkdir(parents=True)
+                exe.write_text(content, encoding="utf-8")
+            plan = {"mode": "macos-app", "target_path": str(old), "new_app": str(new),
+                    "backup_path": str(root / "backup.app"), "version": "2.0.0.1"}
+
+            def launch(args, **_kwargs):
+                if args[0] == "open":
+                    raise OSError("启动失败")
+
+            with self.assertRaises(InstallError):
+                installer.apply_install(plan, runner=launch)
+            self.assertEqual((old / "Contents/MacOS/JinshujuDesktop").read_text(), "previous")
+
     def test_apply_install_windows_returns_only_after_worker_is_ready(self):
         with tempfile.TemporaryDirectory() as tmp:
             payload = Path(tmp) / "payload"

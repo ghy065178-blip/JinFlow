@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""启动更新提醒回归测试：原生 Tk 窗口，替换网络访问和浏览器调用。"""
+"""启动只检查，用户打开面板并确认后才执行升级。"""
 import json
 import os
 import threading
@@ -8,7 +8,7 @@ import unittest
 import webbrowser
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from tkinter import TclError, ttk
+from tkinter import TclError
 from unittest.mock import patch
 
 from jsj_desktop import __version__
@@ -39,57 +39,63 @@ class UpdateBannerTest(unittest.TestCase):
             if "display" in str(exc).lower():
                 self.skipTest(str(exc))
             raise
-        self.addCleanup(self._close_window, window)
+        self.addCleanup(window.destroy)
         return window
 
-    @staticmethod
-    def _close_window(window):
-        for timer in window.tk.splitlist(window.tk.call("after", "info")):
-            window.after_cancel(timer)
-        window.destroy()
-
-    @staticmethod
-    def _banners(window):
-        return [w for w in window.pack_slaves() if isinstance(w, ttk.Button)
-                and "发现新版本" in w.cget("text")]
+    def _wait_for(self, window, condition):
+        deadline = time.monotonic() + 4
+        while not condition() and time.monotonic() < deadline:
+            window.update()
+            time.sleep(0.01)
+        self.assertTrue(condition())
 
     @staticmethod
     def _manifest(version, tag):
         return {"schema": 1, "latest_version": version, "tag": tag,
                 "assets": {t: manifest.asset_names(t) for t in manifest.TARGETS}}
 
-    def test_startup_opens_exact_release_page_only_on_click(self):
+    def test_startup_button_opens_dialog_and_requires_explicit_confirmation(self):
         threads = []
 
         def fetch(url, timeout):
             threads.append(threading.current_thread())
             return json.dumps(self._manifest("99.0.0", "v99.0.0+build.1"))
 
-        with patch.object(client, "http_get", side_effect=fetch):
+        with patch.object(client, "http_get", side_effect=fetch), \
+                patch.object(service, "apply_update") as apply_update:
             window = self._open_window()
             self.assertTrue(window.update_var.get(), "默认应检查更新")
-            deadline = time.monotonic() + 4
-            while not self._banners(window) and time.monotonic() < deadline:
-                window.update()
-                time.sleep(0.01)
+            banner = window.update_banner
+            self._wait_for(window, banner.winfo_ismapped)
+            self.assertIs(banner.master, window.header)
+            self.assertEqual(banner.cget("text"), "更新")
+            self.assertEqual(str(banner.cget("takefocus")), "1")
+            self.assertTrue(banner.bind("<Return>"))
+            apply_update.assert_not_called()
+            banner.invoke()
+            dialog = window.update_window
+            self.assertEqual(dialog.latest_var.get(), "99.0.0")
+            apply_update.assert_not_called()
+            with patch("jsj_desktop.ui.update_dialog.messagebox.askyesno", return_value=False):
+                dialog.update_btn.invoke()
+            apply_update.assert_not_called()
+
+            def complete(check, progress, relaunch):
+                progress("download", 25, "正在下载")
+                progress("install", 95, "正在安装")
+                return {"latest_version": check.latest_version, "message": "更新完成"}
+
+            apply_update.side_effect = complete
+            with patch("jsj_desktop.ui.update_dialog.messagebox.askyesno", return_value=True), \
+                    patch("jsj_desktop.ui.update_dialog.messagebox.showinfo") as success:
+                dialog.update_btn.invoke()
+                self._wait_for(window, lambda: success.called)
+            self.assertEqual(dialog.state_var.get(), "更新成功")
+            self.assertFalse(banner.winfo_ismapped())
+            apply_update.assert_called_once()
         self.assertEqual(len(threads), 1)
         self.assertIsNot(threads[0], threading.current_thread())
-        self.assertEqual(len(self._banners(window)), 1, "启动后应显示更新提醒")
-        banner, = self._banners(window)
-        self.assertEqual(window.pack_slaves().index(banner), 1)
-        self.assertTrue(banner.winfo_ismapped())
-        self.assertEqual(str(banner.cget("takefocus")), "1")
-        self.assertTrue(banner.bind("<Return>"))
-        style = ttk.Style(window)
-        for state in (("focus",), ("focus", "active")):
-            name = banner.cget("style")
-            self.assertNotEqual(style.lookup(name, "focuscolor", state),
-                                style.lookup(name, "background", state))
-        self.assertIn("v99.0.0", banner.cget("text"))
         self.browser.assert_not_called()
-        banner.invoke()
-        self.browser.assert_called_once_with(
-            manifest.REPO_URL + "/releases/tag/v99.0.0%2Bbuild.1")
 
     def test_explicit_startup_opt_out_does_not_check(self):
         with patch.object(MainWindow, "_auto_check_update") as check:
@@ -97,7 +103,7 @@ class UpdateBannerTest(unittest.TestCase):
             window.update()
         self.assertFalse(window.update_var.get())
         check.assert_not_called()
-        self.assertEqual(self._banners(window), [])
+        self.assertFalse(window.update_banner.winfo_ismapped())
 
     def test_unverified_or_current_results_leave_window_quiet(self):
         with patch.object(client, "http_get", return_value=json.dumps(
@@ -115,10 +121,55 @@ class UpdateBannerTest(unittest.TestCase):
         self.assertTrue(offline.offline)
         window = self._open_window(check_update_on_startup=False)
         with patch.object(window, "_toast") as toast:
+            available = service.check_for_update(info=client.ReleaseInfo(bundled, "release-asset"))
+            window._show_update_banner(available)
+            self._wait_for(window, window.update_banner.winfo_ismapped)
             for result in (current, offline, mismatched):
                 window.event_queue.put(("startup_update", None, result))
-            window._poll()
+            self._wait_for(window, window.event_queue.empty)
             window.update_idletasks()
             toast.assert_not_called()
-        self.assertEqual(self._banners(window), [])
+        self.assertFalse(window.update_banner.winfo_ismapped())
         self.browser.assert_not_called()
+
+    def test_relaunched_app_waits_for_installer_success_log(self):
+        window = self._open_window(check_update_on_startup=False)
+        log = self.data_dir / "install.log"
+        log.write_text("Waiting for the running application to close.\n", encoding="utf-8")
+        with patch.dict(os.environ, {"JSJ_UPDATE_RESULT_LOG": str(log)}), \
+                patch.object(window, "_toast") as toast:
+            window._report_update_result()
+            toast.assert_not_called()
+            log.write_text("2026-11-27T12:00:00 Installed. Backup: example\n", encoding="utf-8")
+            self._wait_for(window, lambda: toast.called)
+        toast.assert_called_once_with("更新成功，已启动 v" + __version__, "ok")
+
+    def test_windows_handoff_is_pending_until_the_relaunched_app_reports_result(self):
+        window = self._open_window(check_update_on_startup=False)
+        result = service.check_for_update(info=client.ReleaseInfo(
+            manifest.local_manifest(), "release-asset"), current_revision=0)
+        window._show_update_banner(result)
+        window.update_banner.invoke()
+        dialog = window.update_window
+        with patch.object(dialog, "_toast") as toast, patch.object(window, "close") as close:
+            dialog._on_done({"latest_version": "2.0.0", "pending": True,
+                             "message": "退出后替换"})
+            self.assertEqual(dialog.state_var.get(), "正在安装…")
+            toast.assert_not_called()
+            close.assert_called_once()
+
+    def test_failed_install_reports_error_and_keeps_update_available(self):
+        window = self._open_window(check_update_on_startup=False)
+        result = service.check_for_update(info=client.ReleaseInfo(
+            manifest.local_manifest(), "release-asset"), current_revision=0)
+        window._show_update_banner(result)
+        window.update_banner.invoke()
+        dialog = window.update_window
+        with patch.object(service, "apply_update", side_effect=NetworkError("下载失败")), \
+                patch("jsj_desktop.ui.update_dialog.messagebox.askyesno", return_value=True), \
+                patch("jsj_desktop.ui.update_dialog.messagebox.showerror") as failure:
+            dialog.update_btn.invoke()
+            self._wait_for(window, lambda: failure.called)
+        self.assertIn("更新失败", dialog.state_var.get())
+        self.assertTrue(window.update_banner.winfo_ismapped())
+        self.assertFalse(dialog.update_btn.instate(("disabled",)))
