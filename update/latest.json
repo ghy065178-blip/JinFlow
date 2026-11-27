@@ -5,7 +5,7 @@
   "release_revision": 1,
   "tag": "v2.0.0",
   "release_date": "2026-11-27",
-  "notes": "2.0.0 统一使用 JinFlow 名称，修复 Mac 全屏焦点与左侧滚动流畅度，统一黑白主题切换，新增 Windows setup.exe 安装与卸载流程；报名业务逻辑、配置格式与本机数据目录保持不变。",
+  "notes": "JinFlow 2.0.0 修订 1。\n更新：液态玻璃风格及高清应用图标。\n新增：可拖拽的左栏分隔线、用户确认后下载安装的顶部更新入口，以及 Windows F11 全屏。\n修复：左栏滚动速度、档案按钮遮挡和 Windows 窗口切换的重复重绘。",
   "min_supported_version": "1.0.0",
   "upgrade_target": "2.0.0.1",
   "legacy_versions": ["1.0.0", "1.0.1", "1.0.2", "1.0.3"],

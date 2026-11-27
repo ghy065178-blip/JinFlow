@@ -138,10 +138,11 @@ Linux   : $XDG_DATA_HOME/jinshuju-desktop/ 或 ~/.local/share/jinshuju-desktop/
 ```json
 {
   "schema": 1,
-  "latest_version": "2.0.0",
+  "latest_version": "2.0.0.1",
+  "release_revision": 1,
   "tag": "v2.0.0",
   "min_supported_version": "1.0.0",
-  "upgrade_target": "2.0.0",
+  "upgrade_target": "2.0.0.1",
   "legacy_versions": ["1.0.0", "1.0.1", "1.0.2", "1.0.3"],
   "assets": {"macos-arm64": {"zip": "JinFlow-macos-arm64.zip"}},
   "checksums_asset": "SHA256SUMS.txt",
@@ -149,11 +150,12 @@ Linux   : $XDG_DATA_HOME/jinshuju-desktop/ 或 ~/.local/share/jinshuju-desktop/
 }
 ```
 
-- 仓库中的模板 `sha256` 为空；Release 工作流调用
+- `tag` 标识产品版本，`latest_version` 标识安装包构建。旧客户端用四段构建号识别原标签下的替换包，应用内更新面板按产品版本与修订号展示。
+- 仓库中的模板 `sha256` 为空，Release 工作流调用
   `tools/generate_update_manifest.py` 从 `SHA256SUMS.txt` 填入真实哈希，
   生成随 Release 发布的 `latest.json`。
 - 应用内默认依次探测：静态清单 → GitHub Releases API → Release 资产清单，
-  取版本号最高者；全部失败才回退随包清单并禁止自动安装。若设置了
+  取构建号最高者。全部失败时，随包清单仅用于显示版本信息。若设置了
   `JSJ_UPDATE_MANIFEST_URL`，则只使用该地址作为唯一来源。
 - `tools/check_update_channel.py --offline` 在 CI / Release 校验四处版本号一致、
   四平台资产名、`legacy_upgrade_paths` 与校验和覆盖。

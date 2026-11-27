@@ -9,6 +9,17 @@ on:
         description: "覆盖发布标签的版本号，不填则使用当前 ref"
         required: false
         type: string
+      tag:
+        description: "从指定分支构建并更新此现有发布标签（可选）"
+        required: false
+        type: string
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+  RELEASE_VERSION: ${{ inputs.version }}
 
 permissions:
   contents: write
@@ -37,9 +48,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="${{ inputs.version }}"
-          if [ -z "$version" ]; then
-            version="${GITHUB_REF_NAME#v}"
+          version="${RELEASE_VERSION:-${RELEASE_TAG#v}}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ || "$RELEASE_TAG" != "v$version" ]]; then
+            echo "Release tag and version must match (vX.Y.Z)" >&2
+            exit 1
           fi
           normalized="$(python - "$version" <<'PY'
           import sys
@@ -92,15 +104,21 @@ jobs:
         run: |
           set -e
           marker="dist/raw/${{ matrix.target }}/JinshujuDesktop.app/Contents/Resources/APP_VERSION.txt"
-          grep -F "JinshujuDesktop ${{ steps.release_version.outputs.version }}" "$marker"
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "dist/raw/${{ matrix.target }}/JinshujuDesktop.app/Contents/Info.plist"
+          grep -Fx "Version: ${{ steps.release_version.outputs.version }}" "$marker"
+          grep -Fx "JinshujuDesktop $(python -c 'from jsj_desktop.update.manifest import local_manifest; print(local_manifest()["latest_version"])')" "$marker"
 
       - name: Verify package version marker
         if: startsWith(matrix.target, 'windows')
         shell: pwsh
         run: |
           $marker = "dist/stage/${{ matrix.target }}/JinshujuDesktop/APP_VERSION.txt"
-          Select-String -Path $marker -SimpleMatch "JinshujuDesktop ${{ steps.release_version.outputs.version }}"
+          if (-not (Select-String -Path $marker -SimpleMatch "Version: ${{ steps.release_version.outputs.version }}")) {
+            throw "安装包的产品版本标记不匹配"
+          }
+          $expected = (Get-Content -Raw update/latest.json | ConvertFrom-Json).latest_version
+          if ((Get-Content -LiteralPath $marker -TotalCount 1) -ne "JinshujuDesktop $expected") {
+            throw "安装包构建标记与更新清单不匹配"
+          }
 
       - name: Verify macOS binary architecture
         if: startsWith(matrix.target, 'macos')
@@ -188,17 +206,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Resolve package version
-        id: release_version
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="${{ inputs.version }}"
-          if [ -z "$version" ]; then
-            version="${GITHUB_REF_NAME#v}"
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
       - name: Download all packages
         uses: actions/download-artifact@v4
         with:
@@ -208,7 +215,15 @@ jobs:
 
       - name: Generate checksums
         run: |
+          set -euo pipefail
           cd release-assets
+          for target in macos-arm64 macos-x86_64 windows-arm64 windows-x86_64; do
+            test -s "JinFlow-$target.zip"
+            case "$target" in
+              macos-*) test -s "JinFlow-$target.dmg" ;;
+              windows-*) test -s "JinFlow-$target-Setup.exe" ;;
+            esac
+          done
           sha256sum JinFlow-*.zip JinFlow-*.dmg JinFlow-*.exe > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
@@ -227,32 +242,34 @@ jobs:
       - name: Publish release assets and notes
         env:
           GH_TOKEN: ${{ github.token }}
+          REPLACE_TAG: ${{ inputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
-          tag="$GITHUB_REF_NAME"
-          version="${{ steps.release_version.outputs.version }}"
-          cat > release-notes.md <<EOF
-          ## 下载
-
-          本次发布版本为 v$version。提供 Intel Mac、Apple Silicon Mac、Windows x86_64 和 Windows ARM64 包，并附带 DMG、ZIP、Windows setup.exe、SHA256SUMS.txt、latest.json 与升级助手。
-
-          macOS 建议打开 DMG 后把应用拖入“应用程序”。Windows 更新会在旧程序退出后由独立 PowerShell 进程完成替换并在失败时回滚。
-
-          应用内更新会校验版本、平台和 SHA-256。启动时默认后台检查更新，发现新版本时在主窗口顶部显示对应发布页入口。报名信息、档案和任务配置保存在本机数据目录。
-
-          JinFlow 方案 B 图标、玻璃质感界面、黑色/白色/跟随系统主题和实时北京时间均随当前版本提供。
-          EOF
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release edit "$tag" --title "v$version" --notes-file release-notes.md
-          else
-            gh release create "$tag" --title "v$version" --notes-file release-notes.md
+          tag="$RELEASE_TAG"
+          notes="docs/releases/$tag.md"
+          if [ ! -f "$notes" ]; then
+            notes=release-notes.md
+            printf '## 下载\n\nJinFlow %s 提供 macOS 和 Windows 的 x86_64 与 ARM64 安装包。\n' "$tag" > "$notes"
+          fi
+          old_tag=''
+          if [ -n "$REPLACE_TAG" ]; then
+            gh release view "$tag" >/dev/null
+            test "$(jq -r .tag release-assets/latest.json)" = "$tag"
+            old_tag=$(git ls-remote --refs origin "refs/tags/$tag" | cut -f 1)
+            test -n "$old_tag"
+          elif ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --verify-tag --title "$tag" --notes-file "$notes"
           fi
           gh release upload "$tag" \
             release-assets/JinFlow-*.zip \
             release-assets/JinFlow-*.dmg \
             release-assets/JinFlow-*.exe \
-            release-assets/SHA256SUMS.txt \
-            release-assets/latest.json \
             release-assets/JinFlow-Upgrade-Helper.py \
             --clobber
+          gh release upload "$tag" release-assets/SHA256SUMS.txt --clobber
+          gh release upload "$tag" release-assets/latest.json --clobber
+          if [ -n "$old_tag" ]; then
+            git push "--force-with-lease=refs/tags/$tag:$old_tag" origin "$GITHUB_SHA:refs/tags/$tag"
+          fi
+          gh release edit "$tag" --title "$tag" --notes-file "$notes"
