@@ -28,7 +28,8 @@ class ScrollableFrame(ttk.Frame):
     def __init__(self, parent, **kwargs):
         super().__init__(parent, **kwargs)
         self.canvas = tk.Canvas(self, background=PALETTE["bg"],
-                                highlightthickness=0, borderwidth=0)
+                                highlightthickness=0, borderwidth=0,
+                                yscrollincrement=3)
         self.vsb = ttk.Scrollbar(self, orient="vertical",
                                  command=self.canvas.yview)
         self.body = ttk.Frame(self.canvas)
@@ -51,6 +52,8 @@ class ScrollableFrame(ttk.Frame):
         self.bind_class(self._pan_tag, "<ButtonRelease-1>", self._on_pan_end)
         self._pan_active = False
         self._pan_y = 0
+        self._scrollregion_after = None
+        self._canvas_width = None
         self.bind_wheel_tree()
 
     @classmethod
@@ -113,10 +116,22 @@ class ScrollableFrame(ttk.Frame):
         self._pan_active = False
 
     def _on_configure(self, _event):
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        # Dynamic profile/field rebuilds emit many Configure events. Coalesce
+        # them into one idle callback so scrolling never competes with layout
+        # recalculation on macOS trackpads.
+        if self._scrollregion_after is None:
+            self._scrollregion_after = self.after_idle(self._apply_scrollregion)
+
+    def _apply_scrollregion(self):
+        self._scrollregion_after = None
+        bbox = self.canvas.bbox("all")
+        if bbox:
+            self.canvas.configure(scrollregion=bbox)
 
     def _on_canvas(self, event):
-        self.canvas.itemconfig(self._win, width=event.width)
+        if event.width != self._canvas_width:
+            self._canvas_width = event.width
+            self.canvas.itemconfig(self._win, width=event.width)
 
     def clear(self):
         for child in self.body.winfo_children():

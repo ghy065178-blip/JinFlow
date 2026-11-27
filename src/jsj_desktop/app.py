@@ -292,7 +292,7 @@ def run_update_apply(args):
 
 def build_parser():
     p = argparse.ArgumentParser(
-        description="金数据报名助手 · 桌面版（默认图形界面）")
+        description="JinFlow · 桌面版（默认图形界面）")
     p.add_argument("--cli", action="store_true",
                    help="使用可选终端模式（默认启动图形界面）")
     p.add_argument("--self-test", action="store_true",

@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""历史版本独立升级助手（1.0.0～1.0.3 → 1.3.0），零第三方依赖。
+"""历史版本独立升级助手（1.0.0～1.0.3 → 2.0.0），零第三方依赖。
 
-1.3.0 已内置「帮助 → 检查更新与升级…」；但已发布的 1.0.x 冻结包里没有
+2.0.0 已内置「帮助 → 检查更新与升级…」；但已发布的 1.0.x 冻结包里没有
 更新代码，无法凭空获得应用内检查能力。本脚本作为发布资产
-`JinshujuDesktop-Upgrade-Helper.py` 随 1.3.0 一起提供，旧版用户只需用
-本机 Python 运行一次即可完成检测、下载、SHA256 校验与切换到 1.3.0。
+`JinFlow-Upgrade-Helper.py` 随 2.0.0 一起提供，旧版用户只需用
+本机 Python 运行一次即可完成检测、下载、SHA256 校验与切换到 2.0.0。
 
-    python JinshujuDesktop-Upgrade-Helper.py --check
-    python JinshujuDesktop-Upgrade-Helper.py --upgrade
-    python JinshujuDesktop-Upgrade-Helper.py --upgrade --app "/Applications/JinshujuDesktop.app"
-    python JinshujuDesktop-Upgrade-Helper.py --upgrade --no-relaunch
-    python JinshujuDesktop-Upgrade-Helper.py --repair --app "C:\\Apps\\JinshujuDesktop"
+    python JinFlow-Upgrade-Helper.py --check
+    python JinFlow-Upgrade-Helper.py --upgrade
+    python JinFlow-Upgrade-Helper.py --upgrade --app "/Applications/JinshujuDesktop.app"
+    python JinFlow-Upgrade-Helper.py --upgrade --no-relaunch
+    python JinFlow-Upgrade-Helper.py --repair --app "C:\\Apps\\JinshujuDesktop"
 
 脚本与桌面版共用同一份 update/latest.json 清单与 SHA256SUMS.txt；不读取、
 不上传、不修改任何报名信息或个人档案文件。
@@ -33,14 +33,16 @@ import zipfile
 from pathlib import Path
 from datetime import datetime
 
-REPO = "https://github.com/ghy065178-blip/jinshuju-registration-desktop"
+REPO = "https://github.com/ghy065178-blip/JinFlow"
 RAW_MANIFEST = ("https://raw.githubusercontent.com/ghy065178-blip/"
-                "jinshuju-registration-desktop/master/update/latest.json")
+                "JinFlow/master/update/latest.json")
 LATEST_ASSET = REPO + "/releases/latest/download/latest.json"
 RELEASE_PAGE = REPO + "/releases/latest"
 TARGETS = ("macos-x86_64", "macos-arm64", "windows-x86_64", "windows-arm64")
-APP = "JinshujuDesktop"
-VERSION_RE = re.compile(r"(?:JinshujuDesktop\s+)?v?(\d+(?:\.\d+){1,3})")
+APP = "JinshujuDesktop"  # 兼容历史可执行文件和本机数据目录
+PACKAGE_NAME = "JinFlow"
+VERSION_RE = re.compile(
+    r"(?:JinFlow|JinshujuDesktop)?\s*v?(\d+(?:\.\d+){1,3})")
 
 
 def fail(message):
@@ -68,7 +70,7 @@ def vkey(text):
 
 def fetch(url, timeout=20):
     req = urllib.request.Request(url, headers={
-        "User-Agent": "JinshujuDesktop-Upgrade-Helper/1.3.0",
+        "User-Agent": "JinFlow-Upgrade-Helper/2.0.0",
         "Cache-Control": "no-cache"})
     with urllib.request.urlopen(req, timeout=timeout,
                                 context=ssl.create_default_context()) as resp:
@@ -115,16 +117,16 @@ def detect_version(app_path):
 def asset_info(manifest, target):
     entry = (manifest.get("assets") or {}).get(target) or {}
     name = entry.get("zip")
-    if name != "%s-%s.zip" % (APP, target):
+    if name != "%s-%s.zip" % (PACKAGE_NAME, target):
         raise ValueError("最新版本没有可用的 %s 安装包" % target)
     base = str(manifest.get("download_base")
-               or (REPO + "/releases/download/%s/" % manifest.get("tag", "v1.3.0")))
+               or (REPO + "/releases/download/%s/" % manifest.get("tag", "v2.0.0")))
     return name, base.rstrip("/") + "/" + name, str(entry.get("sha256") or "")
 
 
 def checksums(manifest, name):
     base = str(manifest.get("download_base")
-               or (REPO + "/releases/download/%s/" % manifest.get("tag", "v1.3.0")))
+               or (REPO + "/releases/download/%s/" % manifest.get("tag", "v2.0.0")))
     url = base.rstrip("/") + "/" + str(manifest.get("checksums_asset")
                                        or "SHA256SUMS.txt")
     try:
@@ -332,7 +334,7 @@ def main(argv=None):
     except Exception as e:
         return fail(str(e))
 
-    print("=== 金数据报名助手 · 版本检查 ===")
+    print("=== JinFlow · 版本检查 ===")
     print("当前版本   : %s" % current)
     print("最新版本   : %s" % latest)
     print("适用平台   : %s" % target)
@@ -365,7 +367,7 @@ def main(argv=None):
         archive = work / name
         with urllib.request.urlopen(
                 urllib.request.Request(url, headers={
-                    "User-Agent": "JinshujuDesktop-Upgrade-Helper/1.3.0"}),
+                    "User-Agent": "JinFlow-Upgrade-Helper/2.0.0"}),
                 timeout=60, context=ssl.create_default_context()) as resp, \
                 open(archive, "wb") as fp:
             shutil.copyfileobj(resp, fp)

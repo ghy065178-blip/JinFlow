@@ -4,7 +4,7 @@
 
 ```bash
 git clone <your-repo-url>
-cd jinshuju-registration-desktop
+cd JinFlow
 python -m pip install -r requirements-dev.txt
 python -m pip install -e .
 python -m jsj_desktop          # 图形界面

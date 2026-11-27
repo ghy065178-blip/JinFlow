@@ -26,7 +26,8 @@ from jsj_desktop import __version__                      # noqa: E402
 from jsj_desktop.data.paths import platform_label        # noqa: E402
 import check_no_pii                                      # noqa: E402
 
-APP = "JinshujuDesktop"
+APP = "JinshujuDesktop"  # 保留内部可执行文件名，兼容 1.x 更新与数据目录
+PRODUCT_NAME = "JinFlow"
 VALID_TARGETS = {"macos-x86_64", "macos-arm64",
                  "windows-x86_64", "windows-arm64"}
 
@@ -34,11 +35,11 @@ VALID_TARGETS = {"macos-x86_64", "macos-arm64",
 # 里的 .app 会触发 Gatekeeper / App Translocation；若目录位于 iCloud 云盘且
 # 同步未完成（bundle 里的文件只是云端占位符），LaunchServices 会直接报
 # 「应用程序 … 无法打开」。DMG + 拖入「应用程序」是标准规避方式。
-RELEASE_NOTES_MACOS = """JinshujuDesktop · macOS 首次运行必读
+RELEASE_NOTES_MACOS = """JinFlow · macOS 首次运行必读
 =========================================
 
 【不要】直接在下载的压缩包、解压出来的文件夹、iCloud 桌面 / 云盘目录里
-双击 JinshujuDesktop.app。macOS 会给下载的 app 加上隔离属性并从随机只读
+双击 JinFlow.app。macOS 会给下载的 app 加上隔离属性并从随机只读
 路径运行；若该目录还在 iCloud 同步中，.app 内部的几百个文件可能尚未下载
 到本地，这两种情况都会出现「应用程序 "JinshujuDesktop.app" 无法打开」。
 
@@ -51,12 +52,12 @@ RELEASE_NOTES_MACOS = """JinshujuDesktop · macOS 首次运行必读
    等同步完成，再把 .app 拖到「应用程序」或任意本地文件夹后打开。
 
 若仍提示「无法打开」或「已损坏」，在「终端」执行：
-   xattr -dr com.apple.quarantine /Applications/JinshujuDesktop.app
+   xattr -dr com.apple.quarantine /Applications/JinFlow.app
 也可右键 .app →「打开」→「仍要打开」。
 
 本包为 ad-hoc 签名、未经 Apple 公证（没有 Developer ID），系统提示属正常现象。
 网络 / 证书诊断（只读，不会提交任何数据）：
-   /Applications/JinshujuDesktop.app/Contents/MacOS/JinshujuDesktop --check-tls
+   /Applications/JinFlow.app/Contents/MacOS/JinshujuDesktop --check-tls
 
 检查更新：菜单「帮助 → 检查更新与升级…」可查看当前/最新版本并一键升级；
 升级只替换程序文件，不改动本机报名信息与档案；失败会提示原因并保留当前版本。
@@ -205,6 +206,8 @@ def build_frozen(target, out_root, version):
         "--add-data", "%s%supdate" %
         (str(ROOT / "update" / "latest.json"), sep),
         "--add-data", "%s%s." % (str(version_marker), sep),
+        "--add-data", "%s%spackaging/icons" %
+        (str(ROOT / "packaging" / "icons" / "app.png"), sep),
     ]
     if target.startswith("macos"):
         cmd += ["--osx-bundle-identifier", "cn.jinshuju.desktop"]
@@ -228,6 +231,9 @@ def set_macos_bundle_version(app_bundle, version):
         data = plistlib.load(fp)
     data["CFBundleShortVersionString"] = str(version)
     data["CFBundleVersion"] = str(version)
+    data["CFBundleDisplayName"] = PRODUCT_NAME
+    data["CFBundleName"] = PRODUCT_NAME
+    data["CFBundleIdentifier"] = "cn.jinflow.desktop"
     with info.open("wb") as fp:
         plistlib.dump(data, fp, fmt=plistlib.FMT_XML, sort_keys=False)
 
@@ -307,11 +313,13 @@ def stage_and_pack(target, out_root, version, sign_identity):
         RELEASE_NOTES_MACOS if is_bundle else RELEASE_NOTES_WINDOWS,
         encoding="utf-8")
 
-    archive = out_root / ("%s-%s.zip" % (APP, target))
+    archive = out_root / ("%s-%s.zip" % (PRODUCT_NAME, target))
     if archive.exists():
         archive.unlink()
     if is_bundle:
         # ditto 保留 .app 内符号链接，普通 zip 会破坏签名与体积
+        # Keep the historical bundle directory for updater compatibility while
+        # publishing the user-facing JinFlow archive name.
         run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent",
              str(stage / (APP + ".app")), str(archive)])
         with zipfile.ZipFile(archive, "a") as zf:
@@ -333,7 +341,7 @@ def make_dmg(target, out_root):
     还原 .app 内的符号链接，从根源上避免「第一次解压的 .app 打不开」。
     """
     stage = out_root / "stage" / target
-    dmg = out_root / ("%s-%s.dmg" % (APP, target))
+    dmg = out_root / ("%s-%s.dmg" % (PRODUCT_NAME, target))
     if dmg.exists():
         dmg.unlink()
     with tempfile.TemporaryDirectory(prefix="jsj-dmg-stage-") as tmp:
@@ -344,15 +352,55 @@ def make_dmg(target, out_root):
             (root / "Applications").symlink_to("/Applications")
         except (OSError, NotImplementedError):
             pass
-        run(["hdiutil", "create", "-volname", APP, "-srcfolder", str(root),
+        run(["hdiutil", "create", "-volname", PRODUCT_NAME, "-srcfolder", str(root),
              "-ov", "-format", "UDZO", str(dmg)])
     return dmg
+
+
+def _find_iscc():
+    """Locate Inno Setup's compiler on a Windows build runner."""
+    candidates = []
+    if os.environ.get("ISCC_PATH"):
+        candidates.append(Path(os.environ["ISCC_PATH"]))
+    candidates += [
+        Path(os.environ.get("PROGRAMFILES(X86)", "")) /
+        "Inno Setup 6/ISCC.exe",
+        Path(os.environ.get("PROGRAMFILES", "")) /
+        "Inno Setup 6/ISCC.exe",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise SystemExit(
+        "构建 Windows 安装版失败：找不到 Inno Setup ISCC.exe。"
+        "请在 Windows 构建机安装 Inno Setup 6，或设置 ISCC_PATH。")
+
+
+def make_windows_setup(target, out_root, version):
+    """Build a per-architecture setup.exe with a normal uninstall entry."""
+    if not target.startswith("windows"):
+        return None
+    iscc = _find_iscc()
+    source = out_root / "stage" / target
+    output_name = "%s-%s-Setup" % (PRODUCT_NAME, target)
+    run([
+        str(iscc), "/Q", "/DAppVersion=%s" % version,
+        "/DSourceDir=%s" % source,
+        "/DOutputDir=%s" % out_root,
+        "/DOutputBaseName=%s" % output_name,
+        str(ROOT / "packaging" / "windows_installer.iss"),
+    ], cwd=str(ROOT))
+    setup = out_root / (output_name + ".exe")
+    if not setup.is_file():
+        raise SystemExit("构建 Windows 安装版失败：未生成 %s" % setup.name)
+    return setup
 
 
 def write_checksums(out_root):
     lines = []
     archives = sorted(list(out_root.glob("*.zip")) +
-                      list(out_root.glob("*.dmg")))
+                      list(out_root.glob("*.dmg")) +
+                      list(out_root.glob("*.exe")))
     for archive in archives:
         h = hashlib.sha256()
         with open(archive, "rb") as fp:
@@ -391,6 +439,7 @@ def main(argv=None):
     build_frozen(target, out_root, args.version)
     archive = stage_and_pack(target, out_root, args.version,
                              args.sign_identity)
+    setup = make_windows_setup(target, out_root, args.version)
     verify_ca_in_archive(archive)
     verify_manifest_in_archive(archive)
     print("发布包 CA 根证书与更新清单检查 OK")
@@ -413,6 +462,9 @@ def main(argv=None):
                       (rel, (":%d" % line) if line else "", reason))
             raise SystemExit(1)
         print("DMG 生成并扫描 OK：%s" % dmg.name)
+
+    if setup:
+        print("Windows 安装版生成 OK：%s" % setup.name)
 
     lines = write_checksums(out_root)
     print("\n完成：%s" % archive)

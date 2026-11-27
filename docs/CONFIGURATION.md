@@ -17,7 +17,7 @@
 | 日志脱敏显示 | 关 | 实时日志 / `settings.json` |
 | 界面主题 | 跟随系统 | 「设置与关于」/ `settings.json` 的 `theme_mode` |
 | 启动时自动检查更新 | 开 | 「设置与关于」/ `settings.json` 的 `check_update_on_startup`（1.2.0） |
-| 最新版本 / 升级目标 | `1.3.0` | `update/latest.json`（只读发布通道） |
+| 最新版本 / 升级目标 | `2.0.0` | `update/latest.json`（只读发布通道） |
 | 北京时间时区 | `Asia/Shanghai`（缺少时区库时 UTC+8） | `core/constants.py` |
 | User-Agent | 与旧脚本一致 | `core/constants.py` |
 
@@ -131,21 +131,21 @@ Linux   : $XDG_DATA_HOME/jinshuju-desktop/ 或 ~/.local/share/jinshuju-desktop/
 }
 ```
 
-## 6. 更新通道与版本清单（1.3.0）
+## 6. 更新通道与版本清单（2.0.0）
 
-`update/latest.json` 是版本无关的只读清单，历史版本与 1.3.0 使用同一格式：
+`update/latest.json` 是版本无关的只读清单，历史版本与 2.0.0 使用同一格式：
 
 ```json
 {
   "schema": 1,
-  "latest_version": "1.3.0",
-  "tag": "v1.3.0",
+  "latest_version": "2.0.0",
+  "tag": "v2.0.0",
   "min_supported_version": "1.0.0",
-  "upgrade_target": "1.3.0",
+  "upgrade_target": "2.0.0",
   "legacy_versions": ["1.0.0", "1.0.1", "1.0.2", "1.0.3"],
-  "assets": {"macos-arm64": {"zip": "JinshujuDesktop-macos-arm64.zip"}},
+  "assets": {"macos-arm64": {"zip": "JinFlow-macos-arm64.zip"}},
   "checksums_asset": "SHA256SUMS.txt",
-  "download_base": ".../releases/download/v1.3.0/"
+  "download_base": ".../releases/download/v2.0.0/"
 }
 ```
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 可选：把已构建的 .app 制作成带「应用程序」快捷方式的 DMG。
-# 用法：bash packaging/make_dmg.sh dist/raw/macos-arm64/JinshujuDesktop.app dist/JinshujuDesktop-macos-arm64.dmg
+# 用法：bash packaging/make_dmg.sh dist/raw/macos-arm64/JinshujuDesktop.app dist/JinFlow-macos-arm64.dmg
 set -euo pipefail
 
 APP_PATH="${1:?usage: make_dmg.sh <path-to.app> <output.dmg>}"

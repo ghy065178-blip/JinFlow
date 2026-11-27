@@ -29,7 +29,8 @@ from .version import compare_versions, normalize_version
 
 APP = "JinshujuDesktop"
 VERSION_MARKER = "APP_VERSION.txt"
-VERSION_RE = re.compile(r"(?:JinshujuDesktop\s+)?v?(\d+(?:\.\d+){1,3})")
+VERSION_RE = re.compile(
+    r"(?:JinFlow|JinshujuDesktop)?\s*v?(\d+(?:\.\d+){1,3})")
 
 
 def platform_target(label=None):

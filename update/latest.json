@@ -1,39 +1,39 @@
 {
   "schema": 1,
-  "channel": "jinshuju-registration-desktop/stable",
-  "latest_version": "1.3.0",
-  "tag": "v1.3.0",
-  "release_date": "2026-11-26",
-  "notes": "1.3.0 更新方案 B 应用图标、玻璃质感界面和黑色/白色/跟随系统主题；顶部北京时间按 Asia/Shanghai 时区实时更新，报名业务逻辑、配置格式与本机数据目录保持不变。",
+  "channel": "JinFlow/stable",
+  "latest_version": "2.0.0",
+  "tag": "v2.0.0",
+  "release_date": "2026-11-27",
+  "notes": "2.0.0 统一使用 JinFlow 名称，修复 Mac 全屏焦点与左侧滚动流畅度，统一黑白主题切换，新增 Windows setup.exe 安装与卸载流程；报名业务逻辑、配置格式与本机数据目录保持不变。",
   "min_supported_version": "1.0.0",
-  "upgrade_target": "1.3.0",
+  "upgrade_target": "2.0.0",
   "legacy_versions": ["1.0.0", "1.0.1", "1.0.2", "1.0.3"],
   "legacy_upgrade_paths": {
-    "1.0.0": {"tag": "v1.0.0", "upgrade_to": "1.3.0", "data_compatible": true, "bridge": "JinshujuDesktop-Upgrade-Helper.py"},
-    "1.0.1": {"tag": "v1.0.1", "upgrade_to": "1.3.0", "data_compatible": true, "bridge": "JinshujuDesktop-Upgrade-Helper.py"},
-    "1.0.2": {"tag": "v1.0.2", "upgrade_to": "1.3.0", "data_compatible": true, "bridge": "JinshujuDesktop-Upgrade-Helper.py"},
-    "1.0.3": {"tag": "v1.0.3", "upgrade_to": "1.3.0", "data_compatible": true, "bridge": "JinshujuDesktop-Upgrade-Helper.py"}
+    "1.0.0": {"tag": "v1.0.0", "upgrade_to": "2.0.0", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"},
+    "1.0.1": {"tag": "v1.0.1", "upgrade_to": "2.0.0", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"},
+    "1.0.2": {"tag": "v1.0.2", "upgrade_to": "2.0.0", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"},
+    "1.0.3": {"tag": "v1.0.3", "upgrade_to": "2.0.0", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"}
   },
-  "download_base": "https://github.com/ghy065178-blip/jinshuju-registration-desktop/releases/download/v1.3.0/",
+  "download_base": "https://github.com/ghy065178-blip/JinFlow/releases/download/v2.0.0/",
   "checksums_asset": "SHA256SUMS.txt",
   "manual_url": "https://github.com/ghy065178-blip/jinshuju-registration-desktop/releases/latest",
   "assets": {
     "macos-x86_64": {
-      "zip": "JinshujuDesktop-macos-x86_64.zip",
-      "dmg": "JinshujuDesktop-macos-x86_64.dmg",
+      "zip": "JinFlow-macos-x86_64.zip",
+      "dmg": "JinFlow-macos-x86_64.dmg",
       "sha256": ""
     },
     "macos-arm64": {
-      "zip": "JinshujuDesktop-macos-arm64.zip",
-      "dmg": "JinshujuDesktop-macos-arm64.dmg",
+      "zip": "JinFlow-macos-arm64.zip",
+      "dmg": "JinFlow-macos-arm64.dmg",
       "sha256": ""
     },
     "windows-x86_64": {
-      "zip": "JinshujuDesktop-windows-x86_64.zip",
+      "zip": "JinFlow-windows-x86_64.zip",
       "sha256": ""
     },
     "windows-arm64": {
-      "zip": "JinshujuDesktop-windows-arm64.zip",
+      "zip": "JinFlow-windows-arm64.zip",
       "sha256": ""
     }
   }

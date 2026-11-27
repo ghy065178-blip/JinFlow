@@ -22,7 +22,7 @@ from .errors import (AssetError, ChannelError, ChecksumError,
 
 DEFAULT_TIMEOUT = 8.0
 DOWNLOAD_TIMEOUT = 45.0
-USER_AGENT = "JinshujuDesktop-Updater/%s" % __version__
+USER_AGENT = "JinFlow-Updater/%s" % __version__
 
 
 class ReleaseInfo:

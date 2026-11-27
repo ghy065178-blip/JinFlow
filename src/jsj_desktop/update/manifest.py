@@ -2,7 +2,7 @@
 """版本无关的更新通道：清单格式、GitHub Releases 适配与平台资产选择。
 
 通道设计要点：
-  * 静态清单 update/latest.json 是权威来源，不含个人信息，旧版本与 1.3.0
+  * 静态清单 update/latest.json 是权威来源，不含个人信息，旧版本与 2.0.0
     使用同一格式；GitHub Releases API 作为交叉校验来源，取两者中版本号更高者；
   * 任一来源失败不影响其它来源（例如 API 触发匿名限流）；全部失败才回退到
     随包内置清单，并明确标记 offline，禁止基于离线信息自动安装；
@@ -19,7 +19,7 @@ from .version import (LEGACY_VERSIONS, MIN_UPGRADEABLE_VERSION,
                       normalize_version)
 
 REPO_OWNER = "ghy065178-blip"
-REPO_NAME = "jinshuju-registration-desktop"
+REPO_NAME = "JinFlow"
 REPO_URL = "https://github.com/%s/%s" % (REPO_OWNER, REPO_NAME)
 API_LATEST = "https://api.github.com/repos/%s/%s/releases/latest" % (
     REPO_OWNER, REPO_NAME)
@@ -32,11 +32,11 @@ RELEASE_PAGE = REPO_URL + "/releases/latest"
 MANIFEST_SCHEMA = 1
 ENV_MANIFEST_URL = "JSJ_UPDATE_MANIFEST_URL"
 
-APP = "JinshujuDesktop"
+APP = "JinFlow"
 TARGETS = ("macos-x86_64", "macos-arm64",
            "windows-x86_64", "windows-arm64")
 ASSET_RE = re.compile(
-    r"^JinshujuDesktop-(macos-x86_64|macos-arm64|windows-x86_64|"
+    r"^JinFlow-(macos-x86_64|macos-arm64|windows-x86_64|"
     r"windows-arm64)\.(zip|dmg)$")
 
 

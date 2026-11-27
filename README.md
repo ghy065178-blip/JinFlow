@@ -1,4 +1,4 @@
-# 金数据报名助手 · 桌面版
+# JinFlow · 桌面版
 
 把原有的「金数据自动提交脚本 + 浏览器控制面板」改造为一个**可直接发布到 GitHub 的跨平台桌面软件项目**：
 
@@ -6,7 +6,7 @@
 - 交互升级为 **tkinter/ttk 原生图形窗口**，界面呈现、操作入口、交互逻辑与功能行为与文件夹内原「可视化操控面板」逐项一致；不再需要终端窗口、`.bat` 启动器、本地 HTTP 服务或浏览器标签页；
 - 所有报名信息与多人档案只写在**本机用户数据目录**，仓库与发布包不含任何内置个人信息、真实活动链接或日志；
 - 支持在本地**保存 / 管理 / 读取 / 切换多人信息**，并保留最多 8 个独立任务；
-- 1.3.0 提供方案 B 应用图标、玻璃质感视觉增强、黑色/白色/跟随系统主题和实时北京时间；
+- 2.0.0 提供方案 B 应用图标、玻璃质感视觉增强、黑色/白色/跟随系统主题和实时北京时间；
 - 目标平台：**Intel Mac (x86_64)、Apple Silicon Mac (ARM64)、Windows x86_64/AMD64、Windows ARM64**。
 
 > 运行时零第三方依赖，只需要 Python 3.11+ 标准库（含 Tcl/Tk）。
@@ -17,7 +17,7 @@
 ## 1. 目录结构
 
 ```
-jinshuju-registration-desktop/
+JinFlow/
 ├── .github/
 │   ├── workflows/
 │   │   ├── ci.yml                  # 四平台 + Linux 的测试 / PII 扫描矩阵
@@ -53,7 +53,7 @@ jinshuju-registration-desktop/
 │       ├── theme.py / widgets.py   # 玻璃质感主题、状态卡、滚动容器、彩色日志
 │       ├── main_window.py          # 与原面板一致的单页主窗口（含菜单/弹窗附加入口）
 │       └── update_dialog.py        # 帮助菜单的检查更新弹窗（不占主界面）
-├── update/latest.json              # 版本无关的更新通道清单（1.3.0 / 四平台资产 / 历史版本）
+├── update/latest.json              # 版本无关的更新通道清单（2.0.0 / 四平台资产 / 历史版本）
 ├── tests/                          # 单元测试（含界面一致性与升级端到端演练）+ 合成样例
 │   └── fixtures/                   # 合成 GraphQL 响应与黄金数据
 ├── legacy/auto_submit_reference.py # 旧脚本只读参考副本（已移除内置 token）
@@ -126,12 +126,12 @@ set PYTHONPATH=src && python -m jsj_desktop   # Windows CMD
 ```bash
 python -m jsj_desktop --self-test             # 无界面、无网络逻辑自检
 python -m jsj_desktop --cli --link https://jsj.top/f/xxxxx --dry-run
-python -m jsj_desktop --check-update         # 1.3.0：只读显示当前/最新版本
-python -m jsj_desktop --apply-update         # 1.3.0：校验后安装并切换到最新版
+python -m jsj_desktop --check-update         # 2.0.0：只读显示当前/最新版本
+python -m jsj_desktop --apply-update         # 2.0.0：校验后安装并切换到最新版
 python tools/smoke_test.py                    # 自检 + 全量单元测试
 python -m unittest discover -s tests -t . -v
 python tools/check_no_pii.py --strict         # 敏感数据扫描
-python tools/check_update_channel.py --offline  # 1.3.0：更新通道静态校验
+python tools/check_update_channel.py --offline  # 2.0.0：更新通道静态校验
 ```
 
 ### 发布包
@@ -179,10 +179,10 @@ Windows 解压 zip 后双击 `JinshujuDesktop.exe`。
 
 | 发布包 | 架构 | GitHub Actions runner | 说明 |
 |---|---|---|---|
-| `JinshujuDesktop-macos-x86_64.dmg` + `.zip` | Intel Mac | `macos-15-intel` / `macos-26-intel` | 原生 x86_64；优先用 DMG |
-| `JinshujuDesktop-macos-arm64.dmg` + `.zip` | Apple Silicon | `macos-15` / `macos-26` | 原生 arm64；优先用 DMG |
-| `JinshujuDesktop-windows-x86_64.zip` | Windows AMD64 | `windows-2022` / `windows-2025` | 原生 x64 |
-| `JinshujuDesktop-windows-arm64.zip` | Windows ARM64 | `windows-11-arm` | 原生 ARM64，Python 3.11+ |
+| `JinFlow-macos-x86_64.dmg` + `.zip` | Intel Mac | `macos-15-intel` / `macos-26-intel` | 原生 x86_64；优先用 DMG |
+| `JinFlow-macos-arm64.dmg` + `.zip` | Apple Silicon | `macos-15` / `macos-26` | 原生 arm64；优先用 DMG |
+| `JinFlow-windows-x86_64.zip` + `JinFlow-windows-x86_64-Setup.exe` | Windows AMD64 | `windows-2022` / `windows-2025` | 原生 x64，支持安装 / 启动 / 卸载 |
+| `JinFlow-windows-arm64.zip` + `JinFlow-windows-arm64-Setup.exe` | Windows ARM64 | `windows-11-arm` | 原生 ARM64，支持安装 / 启动 / 卸载 |
 
 构建要点（完整说明见 `docs/RELEASE.md`）：
 
@@ -205,7 +205,7 @@ Windows 解压 zip 后双击 `JinshujuDesktop.exe`。
 - `calibrate_clock` 6 次采样取中位数、`build_input` 的 `fillingDuration`、`submit_once` 的 success / wait / fatal / net / maybe 判定；
 - 等待心跳、提前量 `-6`、间隔 `0.05`、时长 `40`、冲刺随机抖动、重复提交保护与 `--quick` / `--dry-run` 语义。
 
-`tests/test_legacy_parity.py` 直接加载 `legacy/auto_submit_reference.py`（旧脚本只读副本，仅移除了内置活动 token），逐项比对输出；`tests/test_mapping.py` 用黄金数据断言最终提交值。1.3.0 继续保留原有业务等价性回归，并新增主题、北京时间和图标资源检查。
+`tests/test_legacy_parity.py` 直接加载 `legacy/auto_submit_reference.py`（旧脚本只读副本，仅移除了内置活动 token），逐项比对输出；`tests/test_mapping.py` 用黄金数据断言最终提交值。2.0.0 继续保留原有业务等价性回归，并新增主题、北京时间和图标资源检查。
 
 > 唯一有意的业务差异：移除了内置的某次真实活动表单 token（隐私要求）。用户填写链接后，行为与「回车=使用上次链接」保持一致。
 
@@ -222,7 +222,7 @@ Windows 解压 zip 后双击 `JinshujuDesktop.exe`。
 
 ---
 
-## 8. 检查更新与升级（1.3.0）
+## 8. 检查更新与升级（2.0.0）
 
 菜单 **帮助 → 检查更新与升级…** 打开独立弹窗，显示**当前版本**、**最新版本**、
 适用平台、更新通道与版本说明，并可一键完成「下载 → SHA256 校验 → 安装 →
@@ -233,14 +233,14 @@ Windows 解压 zip 后双击 `JinshujuDesktop.exe`。
 |---|---|
 | 检查来源 | `update/latest.json` 静态清单（权威）、GitHub Releases API、Release 资产 `latest.json`；取其中版本号最高者；全部失败则显示随包兜底信息并禁止自动安装 |
 | 校验 | 下载 `SHA256SUMS.txt`，与清单内置哈希交叉核对，任一不一致即中止 |
-| 安装 | macOS 备份旧 `.app` → 重做 ad-hoc 签名 → 去隔离属性 → 重启；Windows 暂存新目录并由独立 PowerShell 进程在退出后替换、回滚；源码运行切换到 `<数据目录>/updates/1.3.0/` |
+| 安装 | macOS 备份旧 `.app` → 重做 ad-hoc 签名 → 去隔离属性 → 重启；Windows 暂存新目录并由独立 PowerShell 进程在退出后替换、回滚；源码运行切换到 `<数据目录>/updates/2.0.0/` |
 | 失败处理 | 网络、限流、证书、清单、资产、校验和、版本/架构不符、写入失败均有明确中文提示；旧版本与报名数据保持原样 |
-| 历史版本 | 1.0.0 / 1.0.1 / 1.0.2 / 1.0.3 均可直接升到 1.3.0；四版本共用同一数据目录与配置格式，无需迁移 |
+| 历史版本 | 1.0.0 / 1.0.1 / 1.0.2 / 1.0.3 均可直接升到 2.0.0；四版本共用同一数据目录与配置格式，无需迁移 |
 
-> 覆盖发布后的 1.0.x～1.3.0 安装包共用同一套更新修复。仍在使用旧冻结包时，
-> 可下载 Release 资产 `JinshujuDesktop-Upgrade-Helper.py`，用本机 Python 执行
-> `python JinshujuDesktop-Upgrade-Helper.py --upgrade` 一次即可校验并切换到
-> 1.3.0；Windows 原位修复当前版本前请关闭应用并使用 `--repair --app`。1.2.0 起均可在应用内升级。
+> 覆盖发布后的 1.0.x～2.0.0 安装包共用同一套更新修复。仍在使用旧冻结包时，
+> 可下载 Release 资产 `JinFlow-Upgrade-Helper.py`，用本机 Python 执行
+> `python JinFlow-Upgrade-Helper.py --upgrade` 一次即可校验并切换到
+> 2.0.0；Windows 原位修复当前版本前请关闭应用并使用 `--repair --app`。1.2.0 起均可在应用内升级。
 
 启动时默认在后台检查新版本。在线检查发现新版本后，主窗口顶部会显示更新按钮，
 点击可在系统浏览器打开对应版本的 GitHub 发布页。在「帮助 → 设置与关于」取消
@@ -266,10 +266,10 @@ A：纯接口提交不可用，控制台会提示并停止，请在网页端手�
 A：在左栏「报名信息」为每人存一套档案；点「+ 新建任务」，各任务选择不同档案、设置不同时间，可同时运行（最多 8 个）。
 
 **Q：升级后旧数据会丢吗？**
-A：不会。旧版文件保持原样，用菜单「导入旧版数据…」或 `tools/migrate_legacy.py` 复制到新的用户数据目录即可。1.3.0 的应用内升级也完全不读写 `报名信息.json` / `profiles.json`。
+A：不会。旧版文件保持原样，用菜单「导入旧版数据…」或 `tools/migrate_legacy.py` 复制到新的用户数据目录即可。2.0.0 的应用内升级也完全不读写 `报名信息.json` / `profiles.json`。
 
-**Q：1.0.x 旧版本怎么升到 1.3.0？**
-A：已重新发布的对应安装包包含统一更新修复。仍在使用旧冻结包时，请下载 Release 资产 `JinshujuDesktop-Upgrade-Helper.py` 运行 `python JinshujuDesktop-Upgrade-Helper.py --upgrade`，或直接覆盖安装 1.3.0。数据目录通用，1.2.0 之后可在「帮助 → 检查更新与升级…」完成。
+**Q：1.0.x 旧版本怎么升到 2.0.0？**
+A：已重新发布的对应安装包包含统一更新修复。仍在使用旧冻结包时，请下载 Release 资产 `JinFlow-Upgrade-Helper.py` 运行 `python JinFlow-Upgrade-Helper.py --upgrade`，或直接覆盖安装 2.0.0。数据目录通用，1.2.0 之后可在「帮助 → 检查更新与升级…」完成。
 
 **Q：检查更新提示失败怎么办？**
 A：弹窗会给出具体原因（网络、GitHub 限流、证书、缺少校验和、版本/架构不符等）。可检查网络与系统时间、稍后重试，或用「复制下载链接」手动下载；失败时当前版本与数据不会改变。

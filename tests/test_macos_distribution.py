@@ -55,7 +55,7 @@ class MacOsDistributionTest(unittest.TestCase):
 
     def test_scheme_b_icon_assets_are_present_and_wired(self):
         icons = ROOT / "packaging" / "icons"
-        for name in ("app.svg", "app.icns", "app.ico"):
+        for name in ("app.svg", "app.icns", "app.ico", "app.png"):
             path = icons / name
             self.assertTrue(path.exists(), "缺少图标资源：%s" % name)
             self.assertGreater(path.stat().st_size, 0)
@@ -64,6 +64,7 @@ class MacOsDistributionTest(unittest.TestCase):
             self.assertIn(marker, source)
         self.assertIn('"packaging" / "icons" / "app.icns"', BUILD_PY)
         self.assertIn('"packaging" / "icons" / "app.ico"', BUILD_PY)
+        self.assertIn('"packaging" / "icons" / "app.png"', BUILD_PY)
 
     def test_make_dmg_uses_hdiutil_readonly_image(self):
         import tempfile
@@ -79,7 +80,7 @@ class MacOsDistributionTest(unittest.TestCase):
         self.assertIn("create", cmd)
         self.assertIn("-srcfolder", cmd)
         self.assertIn("UDZO", cmd)
-        self.assertTrue(str(dmg).endswith("JinshujuDesktop-macos-arm64.dmg"))
+        self.assertTrue(str(dmg).endswith("JinFlow-macos-arm64.dmg"))
 
     def test_checksums_cover_both_zip_and_dmg(self):
         import tempfile
@@ -106,7 +107,7 @@ class MacOsDistributionTest(unittest.TestCase):
         run.assert_not_called()
 
     def test_release_workflow_uploads_and_verifies_dmg(self):
-        for keyword in ("dist/*.dmg", "JinshujuDesktop-*.dmg",
+        for keyword in ("dist/*.dmg", "JinFlow-*.dmg",
                         "Verify macOS distribution (user flow)",
                         "ditto -x -k", "hdiutil attach",
                         "codesign --verify --deep --strict",

@@ -5,7 +5,7 @@
     python tools/check_update_channel.py --offline
     python tools/check_update_channel.py --offline --checksums dist/SHA256SUMS.txt
 
-校验：三处版本号一致、与清单 1.3.0 一致、清单 schema / 历史版本兼容表 /
+校验：三处版本号一致、与清单 2.0.0 一致、清单 schema / 历史版本兼容表 /
 四平台资产名 / 校验和文件名合法；传入 SHA256SUMS.txt 时还确认每个平台包
 都有对应校验和。失败即返回非零，防止发出「版本号不对 / 旧版本升不上来」的 Release。
 """

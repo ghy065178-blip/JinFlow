@@ -47,7 +47,7 @@ python tools/migrate_legacy.py --source "D:/path/to/旧脚本文件夹" --data-d
 |---|---|
 | 已是 1.2.0 | 「帮助 → 检查更新与升级…」直接检查并升级后续版本 |
 | 1.0.x 源码运行 | `python -m jsj_desktop --apply-update` 或应用内菜单；也可直接拉取新源码 |
-| 1.0.x 冻结包（无更新代码） | 下载 Release 资产 `JinshujuDesktop-Upgrade-Helper.py`，执行 `python JinshujuDesktop-Upgrade-Helper.py --upgrade`；或直接下载对应平台 1.2.0 安装包覆盖 |
+| 1.0.x 冻结包（无更新代码） | 下载 Release 资产 `JinFlow-Upgrade-Helper.py`，执行 `python JinFlow-Upgrade-Helper.py --upgrade`；或直接下载对应平台 1.2.0 安装包覆盖 |
 
 升级过程只写临时目录、安装位置与 `<数据目录>/updates/`，旧安装会备份；
 `报名信息.json`、档案、任务目录、上次表单链接均原样保留。升级后建议按下面

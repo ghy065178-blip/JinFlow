@@ -53,7 +53,7 @@
  进程在旧程序退出后替换并回滚，源码运行切换到 `<数据目录>/updates/<版本>/`。
 - 历史版本 1.0.0～1.0.3 与本版本共用数据目录与配置格式；覆盖发布包包含同一套
   更新入口，仍在使用旧冻结包时由 `tools/upgrade_legacy.py`（Release 资产
-  `JinshujuDesktop-Upgrade-Helper.py`）作为一次性桥接。
+  `JinFlow-Upgrade-Helper.py`）作为一次性桥接。
 - 所有异常统一为 `UpdateError` 子类，界面用 `user_message()` 显示原因与建议；
   失败时安装位置与报名数据保持原样。
 

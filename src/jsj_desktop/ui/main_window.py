@@ -47,7 +47,7 @@ THEME_CHOICES = (("dark", "黑色"), ("system", "跟随系统"), ("light", "白�
 class MainWindow(Tk):
     def __init__(self, data_dir=None, start_task="t1"):
         super().__init__()
-        self.title("金数据报名 · 可视化控制平台")
+        self.title("JinFlow")
         self.geometry("1360x860")
         self.minsize(1080, 700)
 
@@ -153,12 +153,19 @@ class MainWindow(Tk):
             return "break"
 
         self.update_banner.bind("<Return>", activate_banner)
-        ttk.Label(top, text="J", style="Brand.TLabel").pack(side=LEFT, padx=(0, 10))
+        self._brand_icon = None
+        try:
+            icon_path = data_paths.resource_path("packaging/icons/app.png")
+            self._brand_icon = tk.PhotoImage(master=self, file=icon_path)
+            ttk.Label(top, image=self._brand_icon).pack(side=LEFT, padx=(0, 10))
+        except (OSError, tk.TclError):
+            ttk.Label(top, text="JF", style="Brand.TLabel").pack(
+                side=LEFT, padx=(0, 10))
         brand = ttk.Frame(top)
         brand.pack(side=LEFT)
-        ttk.Label(brand, text="金数据报名 · 可视化控制平台",
+        ttk.Label(brand, text="JinFlow",
                   style="Title.TLabel").pack(anchor="w")
-        ttk.Label(brand, text="原脚本零改动 · 配置编辑 · 终端实时监控（桌面版）",
+        ttk.Label(brand, text="配置编辑 · 实时终端监控",
                   style="Muted.TLabel").pack(anchor="w")
 
         spacer = ttk.Frame(top)
@@ -253,13 +260,6 @@ class MainWindow(Tk):
         outer, body, _tag = self._panel(self.left_scroll.body, "运行配置",
                                        "原脚本参数")
         outer.pack(fill=X, pady=(0, 12))
-        notice = ttk.Label(
-            body, style="Notice.TLabel", wraplength=350, justify=LEFT,
-            padding=(10, 8),
-            text="本平台不修改任何原有代码：原脚本作为子进程被托管，平台只读写"
-                 "「报名信息.json」（写入前自动备份）。下方修改会即时用于下一次启动。")
-        notice.pack(fill=X, pady=(0, 10))
-
         ttk.Label(body, text="本次表单链接（完整 URL 或末尾 token）",
                   style="CardMuted.TLabel").pack(anchor="w")
         row = ttk.Frame(body, style="Card.TFrame")
@@ -462,10 +462,9 @@ class MainWindow(Tk):
 
     # -------------------- 浮层：toast / 预览 / 设置 --------------------
     def _build_toast(self):
-        win = tk.Toplevel(self)
-        win.overrideredirect(True)
-        win.withdraw()
-        outer = tk.Frame(win, bg=PALETTE["glass"],
+        # Toast remains inside the main toplevel. A separate overrideredirect
+        # window can become a new macOS Space/focus target in full-screen mode.
+        outer = tk.Frame(self, bg=PALETTE["glass"],
                          highlightbackground=PALETTE["border"],
                          highlightthickness=1)
         outer.pack(fill=BOTH, expand=True)
@@ -475,7 +474,8 @@ class MainWindow(Tk):
                          fg=PALETTE["text"], font=(font_family(), 10),
                          wraplength=360, justify=LEFT, padx=12, pady=10)
         label.pack(side=LEFT, fill=BOTH, expand=True)
-        self.toast_win = win
+        self.toast_win = outer
+        self.toast_win.place_forget()
         self.toast_accent = accent
         self.toast_label = label
 
@@ -667,20 +667,15 @@ class MainWindow(Tk):
                  "warn": PALETTE["amber"]}.get(kind, PALETTE["teal"])
         self.toast_accent.configure(bg=color)
         self.toast_label.configure(text=text)
-        self.toast_win.deiconify()
-        self.toast_win.lift()
+        self.toast_win.place(relx=1.0, rely=1.0, anchor="se", x=-22, y=-22)
+        self.toast_win.tkraise()
         self.update_idletasks()
-        w = max(self.toast_win.winfo_width(), 220)
-        h = max(self.toast_win.winfo_height(), 40)
-        x = self.winfo_rootx() + self.winfo_width() - w - 22
-        y = self.winfo_rooty() + self.winfo_height() - h - 22
-        self.toast_win.geometry("+%d+%d" % (x, y))
         if self._toast_after:
             try:
                 self.after_cancel(self._toast_after)
             except Exception:
                 pass
-        self._toast_after = self.after(3200, self.toast_win.withdraw)
+        self._toast_after = self.after(3200, self.toast_win.place_forget)
 
     # ==================== 任务切换与刷新 ====================
     def _render_task_tabs(self):

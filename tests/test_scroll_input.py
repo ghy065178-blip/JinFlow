@@ -119,6 +119,11 @@ class ScrollWiringTest(unittest.TestCase):
         self.assertIn("yscrollcommand=self.vsb.set", self.widgets)
         self.assertIn("command=self.canvas.yview", self.widgets)
 
+    def test_scroll_reflow_is_coalesced_for_dynamic_fields(self):
+        self.assertIn("yscrollincrement=3", self.widgets)
+        self.assertIn("after_idle(self._apply_scrollregion)", self.widgets)
+        self.assertIn("self._canvas_width", self.widgets)
+
     def test_left_panel_tree_is_rebound(self):
         # _build_main 1 处 + _render_fields 2 处（空字段分支与正常分支）
         self.assertGreaterEqual(

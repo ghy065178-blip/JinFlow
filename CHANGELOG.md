@@ -5,7 +5,7 @@
 `update/latest.json`（`latest_version` / `upgrade_target`），发布前由
 `tools/check_update_channel.py --offline` 强制核对。
 
-## 1.3.0 (2026-11-26)
+## 2.0.0 (2026-11-26)
 
 ### 新增
 
@@ -18,7 +18,7 @@
 ### 兼容性
 
 - 表单结构读取、联动规则、`entryAttributes`、校时、等待和冲刺逻辑保持不变。
-- 1.0.0～1.0.3 继续共用原有数据目录和配置格式，可直接升级到 1.3.0。
+- 1.0.0～1.0.3 继续共用原有数据目录和配置格式，可直接升级到 2.0.0。
 - 运行时仍只依赖 Python 标准库和 tkinter/ttk，玻璃效果使用跨平台组合式表现，不引入平台专属 UI 框架。
 
 ## 1.2.0 (2026-11-26)
@@ -39,7 +39,7 @@
 - `update/latest.json` 版本无关清单；`tools/generate_update_manifest.py` 在
   Release 时填入真实 SHA256；`tools/check_update_channel.py` 在 CI/Release
   校验版本号、四平台资产与历史版本升级路径。
-- `tools/upgrade_legacy.py`（发布资产 `JinshujuDesktop-Upgrade-Helper.py`）：
+- `tools/upgrade_legacy.py`（发布资产 `JinFlow-Upgrade-Helper.py`）：
   供 1.0.0～1.0.3 已冻结旧包用户一次性检测、校验并切换到 1.2.0。
 - 构建脚本随包打入 `update/latest.json` 与 `APP_VERSION.txt` 版本标记，
   并在打包后校验；Release 工作流上传 `latest.json` 与升级助手。
@@ -66,7 +66,7 @@ macOS 首次启动体验修复（对应反馈：第一次解压出来的 `.app` 
 「应用程序 "JinshujuDesktop.app" 无法打开」，再解压 / 复制一次却正常）。
 
 ### 诊断
-- 检查 v1.0.2 的 `JinshujuDesktop-macos-arm64.zip`：433 个条目均为 Unix
+- 检查 v1.0.2 的 `JinFlow-macos-arm64.zip`：433 个条目均为 Unix
   条目，可执行文件 `Contents/MacOS/JinshujuDesktop` 权限 0755、19 个符号
   链接完整、CA 根证书与 `_CodeSignature` 齐全，**归档与二进制没有损坏**；
   CI 也实机执行过 `--check-tls`。

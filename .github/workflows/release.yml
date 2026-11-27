@@ -62,6 +62,18 @@ jobs:
       - name: Install build dependencies
         run: python -m pip install --upgrade pip && python -m pip install -r requirements-dev.txt
 
+      - name: Install Inno Setup
+        if: startsWith(matrix.target, 'windows')
+        shell: pwsh
+        run: |
+          $paths = @(
+            "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe",
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+          )
+          if (-not ($paths | Where-Object { Test-Path $_ })) {
+            choco install innosetup --no-progress -y
+          }
+
       - name: Unit tests + sensitive-data gate
         shell: bash
         run: |
@@ -110,8 +122,8 @@ jobs:
           set -e
           # 模拟用户：下载 zip → 解压 → 从副本启动；再从 DMG 挂载后启动
           T=$(mktemp -d)
-          ZIP="dist/JinshujuDesktop-${{ matrix.target }}.zip"
-          DMG="dist/JinshujuDesktop-${{ matrix.target }}.dmg"
+          ZIP="dist/JinFlow-${{ matrix.target }}.zip"
+          DMG="dist/JinFlow-${{ matrix.target }}.dmg"
           ditto -x -k "$ZIP" "$T/from-zip"
           ZAPP="$T/from-zip/JinshujuDesktop.app"
           test -x "$ZAPP/Contents/MacOS/JinshujuDesktop"
@@ -133,7 +145,8 @@ jobs:
         shell: pwsh
         run: |
           Get-Item "dist/raw/${{ matrix.target }}/JinshujuDesktop/JinshujuDesktop.exe" | Select-Object FullName, Length
-          Get-ChildItem "dist/*.zip" | Select-Object Name, Length
+          Get-Item "dist/JinFlow-${{ matrix.target }}-Setup.exe" | Select-Object FullName, Length
+          Get-ChildItem "dist/JinFlow-*.zip" | Select-Object Name, Length
 
       - name: Upload package
         uses: actions/upload-artifact@v4
@@ -142,6 +155,7 @@ jobs:
           path: |
             dist/*.zip
             dist/*.dmg
+            dist/*.exe
             dist/SHA256SUMS.txt
           if-no-files-found: error
 
@@ -174,7 +188,7 @@ jobs:
       - name: Generate checksums
         run: |
           cd release-assets
-          sha256sum JinshujuDesktop-*.zip JinshujuDesktop-*.dmg > SHA256SUMS.txt
+          sha256sum JinFlow-*.zip JinFlow-*.dmg JinFlow-*.exe > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - name: Generate update manifest + legacy upgrade helper
@@ -185,7 +199,7 @@ jobs:
             --output release-assets/latest.json
           python tools/check_update_channel.py --offline \
             --checksums release-assets/SHA256SUMS.txt
-          cp tools/upgrade_legacy.py release-assets/JinshujuDesktop-Upgrade-Helper.py
+          cp tools/upgrade_legacy.py release-assets/JinFlow-Upgrade-Helper.py
           echo "--- latest.json ---"
           cat release-assets/latest.json
 
@@ -200,13 +214,13 @@ jobs:
           cat > release-notes.md <<EOF
           ## 下载
 
-          本次覆盖发布版本为 v$version。提供 Intel Mac、Apple Silicon Mac、Windows x86_64 和 Windows ARM64 包，并附带 DMG、ZIP、SHA256SUMS.txt、latest.json 与升级助手。
+          本次发布版本为 v$version。提供 Intel Mac、Apple Silicon Mac、Windows x86_64 和 Windows ARM64 包，并附带 DMG、ZIP、Windows setup.exe、SHA256SUMS.txt、latest.json 与升级助手。
 
           macOS 建议打开 DMG 后把应用拖入“应用程序”。Windows 更新会在旧程序退出后由独立 PowerShell 进程完成替换并在失败时回滚。
 
           应用内更新会校验版本、平台和 SHA-256。启动时默认后台检查更新，发现新版本时在主窗口顶部显示对应发布页入口。报名信息、档案和任务配置保存在本机数据目录。
 
-          方案 B 图标、玻璃质感界面、黑色/白色/跟随系统主题和实时北京时间均随当前修复包提供。
+          JinFlow 方案 B 图标、玻璃质感界面、黑色/白色/跟随系统主题和实时北京时间均随当前版本提供。
           EOF
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release edit "$tag" --title "v$version" --notes-file release-notes.md
@@ -214,9 +228,10 @@ jobs:
             gh release create "$tag" --title "v$version" --notes-file release-notes.md
           fi
           gh release upload "$tag" \
-            release-assets/JinshujuDesktop-*.zip \
-            release-assets/JinshujuDesktop-*.dmg \
+            release-assets/JinFlow-*.zip \
+            release-assets/JinFlow-*.dmg \
+            release-assets/JinFlow-*.exe \
             release-assets/SHA256SUMS.txt \
             release-assets/latest.json \
-            release-assets/JinshujuDesktop-Upgrade-Helper.py \
+            release-assets/JinFlow-Upgrade-Helper.py \
             --clobber
