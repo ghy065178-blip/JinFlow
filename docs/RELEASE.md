@@ -138,8 +138,8 @@ git push origin v1.0.0
 
 ## 8. 版本与变更
 
-- 产品版本为 **2.0.0**，发布修订为 **1**。源码、Python 包元数据和标签记录产品版本。
-  冻结包的 `APP_VERSION.txt` 首行与更新清单记录构建号 `2.0.0.1`，供已发布客户端比较和校验。
+- 产品版本为 **2.0.0**，发布修订为 **2**。源码、Python 包元数据和标签记录产品版本。
+  冻结包的 `APP_VERSION.txt` 首行与更新清单记录构建号 `2.0.0.2`，供已发布客户端比较和校验。
   `APP_VERSION.txt` 的 `Version:` 行提供新版界面使用的产品版本。发布前运行 `tools/check_update_channel.py --offline` 校验版本配置。
 - 任何涉及 `core/` 业务逻辑的改动，都必须保证 `tests/test_legacy_parity.py` 与
   `tests/test_mapping.py` 继续通过；1.2.0 只新增 `update/` 与界面附加入口，
@@ -165,5 +165,5 @@ git tag -a v2.0.0 -m "2.0.0 玻璃质感界面与主题控制"
 git push origin v2.0.0
 ```
 
-原 2.0.0 在应用内更新面板识别 `2.0.0.1`，替换后的客户端显示 2.0.0 修订 1。
+原 2.0.0 在应用内更新面板识别 `2.0.0.2`，替换后的客户端显示 2.0.0 修订 2。
 四平台更新回归见 `tests/test_update.py`，Windows 模式验证见 `tests/test_window_transition.py`。

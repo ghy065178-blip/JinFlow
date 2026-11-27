@@ -8,6 +8,8 @@
 
 **Tech Stack:** Python 3.11+ 标准库、tkinter/ttk、unittest、现有 PyInstaller/Windows Inno Setup/GitHub Actions 发布链。
 
+**执行记录** 实际发布以 `docs/releases/v2.0.0.md` 为准。已发布客户端只识别数字版本，因此安装包和公开清单使用四段构建号，应用界面保持 2.0.0。真实 macOS 发布包复测后补充了暂存 `.app` 启动修复，对应修订 2。
+
 ---
 
 ## Task 1: 为同版本发布增加可比较的修订号

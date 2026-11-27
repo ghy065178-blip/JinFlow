@@ -35,6 +35,7 @@ from jsj_desktop.update.errors import (ChannelError, ChecksumError,  # noqa: E40
 
 LEGACY = ("1.0.0", "1.0.1", "1.0.2", "1.0.3")
 TARGET = "macos-arm64"
+BUILD_VERSION = vmod.package_version(__version__, __release_revision__)
 
 
 def synthetic_manifest(download_base="https://example.invalid/v2.0.0/"):
@@ -143,12 +144,12 @@ class VersionCompatibilityTest(unittest.TestCase):
 
     def test_manifest_declares_legacy_upgrade_paths(self):
         data = mf.local_manifest()
-        self.assertEqual(data["latest_version"], "2.0.0.1")
-        self.assertEqual(data["upgrade_target"], "2.0.0.1")
+        self.assertEqual(data["latest_version"], BUILD_VERSION)
+        self.assertEqual(data["upgrade_target"], BUILD_VERSION)
         for old in LEGACY:
             self.assertIn(old, data["legacy_versions"])
             self.assertEqual(data["legacy_upgrade_paths"][old]["upgrade_to"],
-                             "2.0.0.1")
+                             BUILD_VERSION)
             self.assertTrue(data["legacy_upgrade_paths"][old]["data_compatible"])
 
 
@@ -224,8 +225,8 @@ class ManifestTest(unittest.TestCase):
 class ClientTest(unittest.TestCase):
     def test_revision_bridge_preserves_display_version_and_updater_ordering(self):
         published = mf.local_manifest()
-        self.assertEqual(published["latest_version"], "2.0.0.1")
-        self.assertEqual(published["upgrade_target"], "2.0.0.1")
+        self.assertEqual(published["latest_version"], BUILD_VERSION)
+        self.assertEqual(published["upgrade_target"], BUILD_VERSION)
         self.assertEqual(published["tag"], "v2.0.0")
         self.assertTrue(vmod.is_newer(published["latest_version"], "2.0.0"))
         online = client.ReleaseInfo(mf.validate_manifest(published), "release-asset")
@@ -233,10 +234,14 @@ class ClientTest(unittest.TestCase):
         self.assertEqual(checked.latest_version, __version__)
         self.assertEqual(checked.latest_revision, __release_revision__)
         self.assertFalse(checked.update_available)
-        self.assertEqual(checked.package_version, "2.0.0.1")
+        self.assertEqual(checked.package_version, BUILD_VERSION)
         original = client.check_for_update(current_version="2.0.0", current_revision=0,
                                            target=TARGET, info=online)
         self.assertTrue(original.can_update)
+        previous = client.check_for_update(current_version="2.0.0",
+                                           current_revision=__release_revision__ - 1,
+                                           target=TARGET, info=online)
+        self.assertTrue(previous.can_update)
 
     def test_revision_bridge_prefers_published_asset_over_bare_tag(self):
         manifest = mf.local_manifest()
@@ -246,7 +251,7 @@ class ClientTest(unittest.TestCase):
         info = client.fetch_latest(sources=sources, fetcher=lambda url, **_: json.dumps(
             api if url == "api" else manifest))
         self.assertEqual(info.source, "release-asset")
-        self.assertEqual(info.package_version, "2.0.0.1")
+        self.assertEqual(info.package_version, BUILD_VERSION)
 
     def test_wrapped_tls_verification_failure_is_reported(self):
         failure = urllib.error.URLError(
@@ -490,9 +495,34 @@ class InstallerTest(unittest.TestCase):
                                           self._package(tmp), "2.0.0")
             self.assertEqual(plan["mode"], "staged")
             self.assertIn("updates/2.0.0", plan["target_path"].replace("\\", "/"))
+            self.assertEqual(Path(plan["target_path"]).name, "JinshujuDesktop.app")
             # platform_label() 返回 macos/windows/linux，不能与 sys.platform 混用
             self.assertTrue(plan["can_auto"])
             self.assertNotIn("没有可直接运行", plan["note"])
+
+    def test_macos_repeated_staging_keeps_bundle_name_and_existing_copy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan = installer.plan_install(fake_ctx(data_dir=tmp), self._package(tmp), "2.0.0")
+            first = installer.apply_install(plan, relaunch=False)
+            launch_calls = []
+            second = installer.apply_install(plan, runner=lambda args: launch_calls.append(args))
+            old, new = (Path(result["installed_to"]) for result in (first, second))
+            self.assertEqual(new.name, "JinshujuDesktop.app")
+            self.assertNotEqual(old, new)
+            self.assertTrue(old.is_dir())
+            self.assertEqual(launch_calls, [[str(new / "Contents/MacOS/JinshujuDesktop")]])
+
+    def test_macos_renamed_bundle_can_be_updated_in_place(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "JinFlow.app"
+            exe = bundle / "Contents/MacOS/JinshujuDesktop"
+            with patch.object(sys, "executable", str(exe)), \
+                    patch.object(sys, "platform", "darwin"), \
+                    patch.object(sys, "frozen", True, create=True), \
+                    patch.dict(os.environ, {"JSJ_DATA_DIR": str(Path(tmp) / "data")}):
+                context = installer.install_context()
+            self.assertEqual(context["mode"], "macos-app")
+            self.assertEqual(context["app_bundle"], str(bundle.resolve()))
 
     def test_apply_install_macos_replaces_and_backs_up(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -717,7 +747,7 @@ class EndToEndUpdateTest(unittest.TestCase):
             self.assertEqual(cfg.read_text(encoding="utf-8"), before)
 
     def test_replace_same_product_version_uses_build_marker(self):
-        package = synthetic_package_bytes(version="2.0.0.1")
+        package = synthetic_package_bytes(version=BUILD_VERSION)
         self._fill(package, hashlib.sha256(package).hexdigest(), mf.local_manifest())
         self.addCleanup(self._fill, self.package, self.digest)
         check = service.check_for_update(current_version="2.0.0", current_revision=0,
@@ -728,8 +758,8 @@ class EndToEndUpdateTest(unittest.TestCase):
             outcome = service.apply_update(check=check, relaunch=False,
                                            progress=lambda stage, *_: progress.append(stage))
             self.assertEqual(outcome["latest_version"], "2.0.0")
-            self.assertEqual(outcome["latest_revision"], 1)
-            self.assertIn("2.0.0.1", outcome["installed_to"])
+            self.assertEqual(outcome["latest_revision"], __release_revision__)
+            self.assertIn(BUILD_VERSION, outcome["installed_to"])
             for stage in ("download", "verify", "install", "done"):
                 self.assertIn(stage, progress)
 
@@ -774,7 +804,7 @@ class EndToEndUpdateTest(unittest.TestCase):
             proc = run_py([sys.executable, str(helper), "--check",
                            "--current-version", old, "--manifest-url", url])
             self.assertEqual(proc.returncode, 0, proc.stderr)
-            self.assertIn("直接升级到 2.0.0.1", proc.stdout)
+            self.assertIn("直接升级到 " + BUILD_VERSION, proc.stdout)
 
     @unittest.skipUnless(sys.platform == "darwin",
                          "合成发布包为 macOS .app 结构")
@@ -862,7 +892,7 @@ class ReleaseConfigTest(unittest.TestCase):
         self.assertIn("(2, 0, 0, 0)", version_info)
         self.assertIn("'2.0.0.0'", version_info)
         self.assertEqual(mf.local_manifest()["product_version"], "2.0.0")
-        self.assertEqual(mf.local_manifest()["latest_version"], "2.0.0.1")
+        self.assertEqual(mf.local_manifest()["latest_version"], BUILD_VERSION)
 
     def test_pyproject_urls_point_to_real_repository(self):
         text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")

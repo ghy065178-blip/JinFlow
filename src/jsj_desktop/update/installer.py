@@ -68,7 +68,7 @@ def install_context():
            "data_dir": str(data_paths.data_dir())}
     if frozen and sys.platform == "darwin" and len(exe.parents) > 2:
         app = exe.parents[2]
-        if app.name == APP + ".app":
+        if app.suffix.lower() == ".app" and exe.parent.name == "MacOS":
             ctx["mode"] = "macos-app"
             ctx["app_bundle"] = str(app)
             ctx["install_root"] = str(app.parent)
@@ -283,7 +283,8 @@ def plan_install(ctx, package, version):
                     "note": "程序退出后由独立脚本完成替换并自动重启。"}
         mode = "staged"
 
-    dest = updates_root / version / ctx["target"]
+    leaf = APP + ".app" if ctx["system"] == "macos" else APP
+    dest = updates_root / version / ctx["target"] / leaf
     # 注意：ctx["system"] 来自 platform_label()，取值是 macos/windows/linux，
     # 不是 sys.platform 的 darwin/win32。
     launchable = Path(package["launch_path"]).is_file() and \
@@ -558,7 +559,9 @@ def apply_install(plan, relaunch=True, runner=None, pid=None):
         return _apply_windows_install(plan, relaunch, runner or subprocess.Popen, pid)
 
     # 源码运行 / 无写入权限 / 手动模式
-    dest = _unique_path(plan["target_path"])
+    dest = Path(plan["target_path"])
+    if dest.exists():
+        dest = _unique_path(dest.parent) / dest.name
     try:
         dest.mkdir(parents=True)
     except Exception as e:
