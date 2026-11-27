@@ -18,7 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from jsj_desktop import __version__                       # noqa: E402
+from jsj_desktop import __release_revision__, __version__ # noqa: E402
 from jsj_desktop.update import manifest as mf             # noqa: E402
 
 
@@ -41,9 +41,8 @@ def main(argv=None):
     template = json.loads((ROOT / "update" / "latest.json")
                           .read_text(encoding="utf-8"))
     data = mf.validate_manifest(template)
-    if data["latest_version"] != __version__:
-        print("失败：清单版本 %s 与源码版本 %s 不一致"
-              % (data["latest_version"], __version__), file=sys.stderr)
+    if (data["product_version"], data["release_revision"]) != (__version__, __release_revision__):
+        print("失败：清单产品版本或发布修订号与源码不一致", file=sys.stderr)
         return 1
     sums = parse_checksums(args.checksums)
     missing = []

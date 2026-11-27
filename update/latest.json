@@ -1,19 +1,19 @@
 {
   "schema": 1,
   "channel": "JinFlow/stable",
-  "latest_version": "2.0.0",
+  "latest_version": "2.0.0.1",
   "release_revision": 1,
   "tag": "v2.0.0",
   "release_date": "2026-11-27",
   "notes": "2.0.0 统一使用 JinFlow 名称，修复 Mac 全屏焦点与左侧滚动流畅度，统一黑白主题切换，新增 Windows setup.exe 安装与卸载流程；报名业务逻辑、配置格式与本机数据目录保持不变。",
   "min_supported_version": "1.0.0",
-  "upgrade_target": "2.0.0",
+  "upgrade_target": "2.0.0.1",
   "legacy_versions": ["1.0.0", "1.0.1", "1.0.2", "1.0.3"],
   "legacy_upgrade_paths": {
-    "1.0.0": {"tag": "v1.0.0", "upgrade_to": "2.0.0", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"},
-    "1.0.1": {"tag": "v1.0.1", "upgrade_to": "2.0.0", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"},
-    "1.0.2": {"tag": "v1.0.2", "upgrade_to": "2.0.0", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"},
-    "1.0.3": {"tag": "v1.0.3", "upgrade_to": "2.0.0", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"}
+    "1.0.0": {"tag": "v1.0.0", "upgrade_to": "2.0.0.1", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"},
+    "1.0.1": {"tag": "v1.0.1", "upgrade_to": "2.0.0.1", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"},
+    "1.0.2": {"tag": "v1.0.2", "upgrade_to": "2.0.0.1", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"},
+    "1.0.3": {"tag": "v1.0.3", "upgrade_to": "2.0.0.1", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"}
   },
   "download_base": "https://github.com/ghy065178-blip/JinFlow/releases/download/v2.0.0/",
   "checksums_asset": "SHA256SUMS.txt",

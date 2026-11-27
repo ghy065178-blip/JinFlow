@@ -44,6 +44,16 @@ def normalize_version(text):
     return base + ("-" + pre if pre else "")
 
 
+def package_version(version, revision):
+    """四段式安装包标记，兼容只按版本号比较的已发布客户端。"""
+    numbers, prerelease = parse_version(version)
+    if not revision:
+        return normalize_version(version)
+    if numbers[3] or prerelease or not 0 < revision <= 65535:
+        raise ValueError("发布修订需要三段式正式版本和有效的 Windows 构建号。")
+    return "%d.%d.%d.%d" % (*numbers[:3], revision)
+
+
 def version_key(text):
     """可直接用于 max()/排序的键：正式版高于同数字预发布版。"""
     nums, pre = parse_version(text)
@@ -112,11 +122,11 @@ def upgrade_plan(current, latest, min_supported=MIN_UPGRADEABLE_VERSION,
         result["reason"] = ("当前版本 %s 低于可升级下限 %s，无法自动升级，"
                             "请手动下载完整安装包覆盖安装。" % (cur, floor))
         return result
-    if compare_versions(cur, new) > 0:
+    comparison = compare_versions(cur, new)
+    if comparison > 0 or (comparison == 0 and current_revision > latest_revision):
         result["reason"] = ("当前版本 %s 高于发布通道版本 %s（开发/预览构建），"
                             "无需升级。" % (cur, new))
         return result
-    comparison = compare_versions(cur, new)
     if comparison == 0 and latest_revision > current_revision:
         result["update_available"] = True
         result["path"] = "direct"
@@ -129,7 +139,7 @@ def upgrade_plan(current, latest, min_supported=MIN_UPGRADEABLE_VERSION,
         return result
     result["update_available"] = True
     result["is_legacy"] = is_legacy(cur, new) or cur in LEGACY_VERSIONS
-    result["path"] = "direct" if result["is_legacy"] else "direct"
+    result["path"] = "direct"
     result["reason"] = ("发现新版本 %s（当前 %s），可直接升级；本机报名信息与"
                         "档案不会被修改。" % (new, cur))
     return result

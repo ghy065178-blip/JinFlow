@@ -56,7 +56,7 @@ def prepare_update(check, progress=None, work_dir=None, fetcher=None,
         installer.extract_zip(archive, root)
         progress("validate", 92, "正在核对版本与平台…")
         package = installer.validate_package(root, check.target,
-                                             check.latest_version)
+                                             check.package_version)
         return {"work_dir": str(work), "archive": str(archive),
                 "package": package, "checksum": checksum,
                 "asset": check.asset}
@@ -87,14 +87,16 @@ def apply_update(check=None, progress=None, relaunch=True, runner=None,
                                   opener=opener)
         ctx = installer.install_context()
         plan = installer.plan_install(ctx, prepared["package"],
-                                      check.latest_version)
+                                      check.package_version)
         progress("install", 95, plan["note"])
         result = installer.apply_install(plan, relaunch=relaunch, runner=runner)
-        progress("done", 100, result["message"])
+        if not result.get("pending"):
+            progress("done", 100, result["message"])
         result.update({
             "noop": False,
             "current_version": check.current_version,
             "latest_version": check.latest_version,
+            "latest_revision": check.latest_revision,
             "target": check.target,
             "asset": check.asset["name"],
             "checksum_source": prepared["checksum"]["source"],

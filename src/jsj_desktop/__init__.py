@@ -14,8 +14,7 @@ def _runtime_version():
 
 
 __version__ = _runtime_version()
-# The release tag remains 2.0.0 for this replacement build.  The revision is
-# compared separately so older 2.0.0 packages can discover the replacement.
+# 发布标签与界面使用产品版本，旧客户端以四段式安装包版本识别修订。
 __release_revision__ = 1
 # 用户可见产品名称。__app_id__ 保留旧值，确保升级不会改变既有用户数据目录。
 __app_name__ = "JinFlow"

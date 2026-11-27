@@ -36,7 +36,8 @@ class WindowsInstallerSpecTest(unittest.TestCase):
         section = self.ui.split("def _build_toast", 1)[1].split(
             "def _build_preview_window", 1)[0]
         self.assertNotIn("tk.Toplevel", section)
-        self.assertIn("place_forget", section)
+        self.assertNotIn("outer.pack(", section)
+        self.assertIn("self.toast_win.place(", self.ui)
 
     def test_brand_and_removed_copy_are_current(self):
         self.assertIn('text="JinFlow"', self.ui)

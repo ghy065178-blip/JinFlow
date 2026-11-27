@@ -16,7 +16,7 @@ from pathlib import Path
 from ..data import paths as data_paths
 from .errors import AssetError, ManifestError, UnsupportedPlatformError
 from .version import (LEGACY_VERSIONS, MIN_UPGRADEABLE_VERSION,
-                      normalize_version)
+                      normalize_version, package_version, version_key)
 
 REPO_OWNER = "ghy065178-blip"
 REPO_NAME = "JinFlow"
@@ -81,6 +81,23 @@ def validate_manifest(data, strict_assets=True):
         raise ManifestError("更新清单缺少合法的最新版本号：%s" % e)
 
     tag = str(data.get("tag") or ("v" + latest)).strip()
+    revision_raw = data.get("release_revision", 0)
+    if isinstance(revision_raw, str) and re.fullmatch(r"[0-9]+", revision_raw):
+        revision_raw = int(revision_raw)
+    if type(revision_raw) is not int or not 0 <= revision_raw <= 65535:
+        raise ManifestError("更新清单的 release_revision 必须是有效的非负构建号。")
+    release_revision = revision_raw
+    # 公开清单使用四段版本供旧客户端安装，当前客户端以 tag 显示产品版本。
+    if release_revision:
+        try:
+            product_version = normalize_version(tag)
+            build_version = package_version(product_version, release_revision)
+        except ValueError as e:
+            raise ManifestError("发布修订与标签不兼容：%s" % e) from e
+        if latest != build_version:
+            raise ManifestError("发布修订与安装包版本不一致。")
+    else:
+        product_version = latest
     min_supported = str(data.get("min_supported_version")
                         or MIN_UPGRADEABLE_VERSION)
     try:
@@ -95,14 +112,6 @@ def validate_manifest(data, strict_assets=True):
                 % (upgrade_target, latest))
     except ValueError as e:
         raise ManifestError("更新清单的 upgrade_target 不合法：%s" % e)
-
-    revision_raw = data.get("release_revision", 0)
-    try:
-        release_revision = int(revision_raw)
-    except (TypeError, ValueError):
-        raise ManifestError("更新清单的 release_revision 必须是非负整数。")
-    if release_revision < 0:
-        raise ManifestError("更新清单的 release_revision 必须是非负整数。")
 
     assets = data.get("assets")
     if not isinstance(assets, dict):
@@ -134,6 +143,7 @@ def validate_manifest(data, strict_assets=True):
     out.update({
         "schema": schema,
         "latest_version": latest,
+        "product_version": product_version,
         "tag": tag,
         "min_supported_version": min_supported,
         "upgrade_target": latest,
@@ -158,7 +168,13 @@ def normalize_github_release(payload):
                       and not p.get("prerelease")]
         if not candidates:
             raise ManifestError("GitHub Releases 中没有可用版本。")
-        payload = max(candidates, key=lambda p: str(p.get("tag_name", "")))
+        def release_key(entry):
+            try:
+                return version_key(str(entry.get("tag_name", "")))
+            except ValueError:
+                return ((), 0, ())
+
+        payload = max(candidates, key=release_key)
     if not isinstance(payload, dict):
         raise ManifestError("GitHub Releases 响应格式错误。")
     tag = str(payload.get("tag_name") or "").strip()

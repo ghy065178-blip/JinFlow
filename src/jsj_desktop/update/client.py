@@ -33,8 +33,9 @@ class ReleaseInfo:
         self.source = source
         self.offline = offline
         self.errors = list(errors or [])
-        self.version = data["latest_version"]
-        self.revision = int(data.get("release_revision", 0) or 0)
+        self.package_version = data["latest_version"]
+        self.version = data.get("product_version", self.package_version)
+        self.revision = data.get("release_revision", 0)
         self.tag = data.get("tag", "v" + self.version)
         self.notes = data.get("notes", "")
         self.manual_url = data.get("manual_url", mf.RELEASE_PAGE)
@@ -152,19 +153,18 @@ def fetch_latest(sources=None, fetcher=None, timeout=DEFAULT_TIMEOUT):
                 cause=errors)
         return ReleaseInfo(bundled, "bundled", offline=True, errors=errors)
 
-    best = max(candidates,
-               key=lambda c: (vmod.version_key(c.version), c.revision,
-                              c.quality()))
+    best = max(candidates, key=lambda c: (vmod.version_key(c.package_version), c.quality()))
     best.errors = errors + best.errors
     return best
 
 
-def check_for_update(current_version=None, current_revision=None, target=None, info=None,
-                     timeout=DEFAULT_TIMEOUT, fetcher=None, sources=None):
+def check_for_update(current_version=None, target=None, info=None,
+                     timeout=DEFAULT_TIMEOUT, fetcher=None, sources=None, *,
+                     current_revision=None):
     """返回 CheckResult：当前版本、最新版本、是否可升级、资产与失败原因。"""
     current = current_version or __version__
-    current_revision = (__release_revision__ if current_revision is None
-                        else current_revision)
+    if current_revision is None:
+        current_revision = __release_revision__ if current == __version__ else 0
     try:
         info = info or fetch_latest(sources=sources, fetcher=fetcher,
                                     timeout=timeout)
@@ -175,31 +175,38 @@ def check_for_update(current_version=None, current_revision=None, target=None, i
             # Linux 等没有官方二进制包的平台仍可正常显示版本信息
             tgt, asset_error = "unsupported", e.user_message()
         plan = vmod.upgrade_plan(
-            current, info.version,
+            vmod.package_version(current, current_revision), info.package_version,
             info.manifest.get("min_supported_version",
-                              vmod.MIN_UPGRADEABLE_VERSION),
-            current_revision=current_revision,
-            latest_revision=info.revision)
+                              vmod.MIN_UPGRADEABLE_VERSION))
         if asset is None and not asset_error:
             try:
                 asset = mf.select_asset(info.manifest, tgt)
             except AssetError as e:
                 asset_error = e.user_message()
-        can_update = bool(plan["update_available"] and plan["supported"]
-                          and asset and not info.offline)
+        try:
+            matching_tag = vmod.normalize_version(info.tag) == info.version
+        except ValueError:
+            matching_tag = False
+        can_update = bool(plan["update_available"] and plan["supported"] and asset
+                          and matching_tag and not info.offline)
         reason = plan["reason"]
+        if (info.revision and current == info.version and
+                current_revision == info.revision):
+            reason = "当前已是最新版本 %s（修订 %d）。" % (info.version, info.revision)
         if info.offline and plan["update_available"]:
             reason = ("无法连接更新通道，当前只显示随包内置的版本信息；"
                       "为避免安装过期版本，请手动下载或联网后重试。")
         elif asset_error and plan["update_available"]:
             reason = asset_error
+        elif not matching_tag and plan["update_available"]:
+            reason = "更新清单的发布标签与版本不一致，请稍后重新检查。"
         elif info.errors and plan["update_available"] and can_update:
             reason += "（部分更新通道不可用，已自动切换可用来源）"
         return CheckResult(
             ok=True, current_version=vmod.normalize_version(current),
-            current_revision=plan["current_revision"],
-            latest_revision=plan["latest_revision"],
+            current_revision=current_revision, latest_revision=info.revision,
             latest_version=info.version, tag=info.tag,
+            package_version=info.package_version,
             update_available=plan["update_available"],
             supported=plan["supported"], is_legacy=plan["is_legacy"],
             upgrade_path=plan["path"], target=tgt, asset=asset,
@@ -210,7 +217,7 @@ def check_for_update(current_version=None, current_revision=None, target=None, i
     except UpdateError as e:
         return CheckResult(
             ok=False, current_version=str(current), latest_version="",
-            current_revision=int(current_revision or 0), latest_revision=0,
+            current_revision=current_revision, latest_revision=0,
             update_available=False, can_update=False, supported=False,
             is_legacy=False, target=str(target or ""), asset=None,
             info=None, notes="", source="", offline=False,
@@ -220,6 +227,7 @@ def check_for_update(current_version=None, current_revision=None, target=None, i
         wrapped = NetworkError("检查更新时出现未预期错误：%s" % e, cause=e)
         return CheckResult(
             ok=False, current_version=str(current), latest_version="",
+            current_revision=current_revision, latest_revision=0,
             update_available=False, can_update=False, supported=False,
             is_legacy=False, target=str(target or ""), asset=None,
             info=None, notes="", source="", offline=False,

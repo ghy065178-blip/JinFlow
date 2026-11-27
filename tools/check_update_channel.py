@@ -18,7 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from jsj_desktop import __version__                       # noqa: E402
+from jsj_desktop import __release_revision__, __version__ # noqa: E402
 from jsj_desktop.update import manifest as mf             # noqa: E402
 from jsj_desktop.update import version as vmod            # noqa: E402
 
@@ -75,14 +75,17 @@ def main(argv=None):
           % (data["latest_version"], data["tag"], data["upgrade_target"]))
     for label, value in (("pyproject.toml", pyproject),
                          ("version_info.txt", win_core),
-                         ("latest.json", data["latest_version"]),
-                         ("upgrade_target", data["upgrade_target"])):
+                         ("latest.json", data["product_version"])):
         if value != __version__:
             errors.append("%s 的版本 %s 与 __version__ %s 不一致"
                           % (label, value, __version__))
     if __version__ != vmod.UPGRADE_TARGET:
         errors.append("代码中的升级目标 %s 不是 %s"
                       % (vmod.UPGRADE_TARGET, __version__))
+    if (data["release_revision"] != __release_revision__ or
+            data["latest_version"] != vmod.package_version(__version__, __release_revision__) or
+            data["tag"] != "v" + __version__):
+        errors.append("发布标签、修订号或安装包版本与源码不一致")
 
     legacy = list(data.get("legacy_versions") or [])
     missing = [v for v in vmod.LEGACY_VERSIONS if v not in legacy]
@@ -108,6 +111,8 @@ def main(argv=None):
         expected.append(names["zip"])
         if "dmg" in names:
             expected.append(names["dmg"])
+        if target.startswith("windows"):
+            expected.append("JinFlow-%s-Setup.exe" % target)
         print("平台资产   : %-18s %s" % (target, names["zip"]))
         asset = mf.select_asset(data, target)
         if not asset["url"].startswith("https://"):

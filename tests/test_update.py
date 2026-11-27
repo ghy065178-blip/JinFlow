@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 import jsj_desktop                                        # noqa: E402
-from jsj_desktop import __version__                       # noqa: E402
+from jsj_desktop import __release_revision__, __version__  # noqa: E402
 from jsj_desktop.update import client, installer, manifest as mf  # noqa: E402
 from jsj_desktop.update import service, version as vmod   # noqa: E402
 from jsj_desktop.update.errors import (ChannelError, ChecksumError,  # noqa: E402
@@ -41,6 +41,7 @@ def synthetic_manifest(download_base="https://example.invalid/v2.0.0/"):
     data = json.loads((ROOT / "update" / "latest.json").read_text(
         encoding="utf-8"))
     data["download_base"] = download_base
+    data.update(latest_version="2.0.0", upgrade_target="2.0.0", release_revision=0)
     return mf.validate_manifest(data)
 
 
@@ -142,12 +143,12 @@ class VersionCompatibilityTest(unittest.TestCase):
 
     def test_manifest_declares_legacy_upgrade_paths(self):
         data = mf.local_manifest()
-        self.assertEqual(data["latest_version"], "2.0.0")
-        self.assertEqual(data["upgrade_target"], "2.0.0")
+        self.assertEqual(data["latest_version"], "2.0.0.1")
+        self.assertEqual(data["upgrade_target"], "2.0.0.1")
         for old in LEGACY:
             self.assertIn(old, data["legacy_versions"])
             self.assertEqual(data["legacy_upgrade_paths"][old]["upgrade_to"],
-                             "2.0.0")
+                             "2.0.0.1")
             self.assertTrue(data["legacy_upgrade_paths"][old]["data_compatible"])
 
 
@@ -155,7 +156,7 @@ class ManifestTest(unittest.TestCase):
     def test_bundled_manifest_is_valid(self):
         data = mf.local_manifest()
         self.assertEqual(data["schema"], mf.MANIFEST_SCHEMA)
-        self.assertEqual(data["latest_version"], "2.0.0")
+        self.assertEqual(data["product_version"], "2.0.0")
         self.assertEqual(data["checksums_asset"], "SHA256SUMS.txt")
 
     def test_all_four_platform_assets_resolve(self):
@@ -188,8 +189,14 @@ class ManifestTest(unittest.TestCase):
 
     def test_manifest_normalizes_release_revision(self):
         data = mf.validate_manifest(dict(synthetic_manifest(),
+                                         latest_version="2.0.0.3", upgrade_target="2.0.0.3",
                                          release_revision="3"))
         self.assertEqual(data["release_revision"], 3)
+
+    def test_manifest_rejects_invalid_release_revision(self):
+        for value in (True, -1, 1.5, "1.5", None, 65536):
+            with self.subTest(value=value), self.assertRaises(ManifestError):
+                mf.validate_manifest(dict(synthetic_manifest(), release_revision=value))
 
     def test_github_api_release_is_normalized(self):
         payload = {"tag_name": "v2.0.0", "body": "notes",
@@ -215,6 +222,32 @@ class ManifestTest(unittest.TestCase):
 
 
 class ClientTest(unittest.TestCase):
+    def test_revision_bridge_preserves_display_version_and_updater_ordering(self):
+        published = mf.local_manifest()
+        self.assertEqual(published["latest_version"], "2.0.0.1")
+        self.assertEqual(published["upgrade_target"], "2.0.0.1")
+        self.assertEqual(published["tag"], "v2.0.0")
+        self.assertTrue(vmod.is_newer(published["latest_version"], "2.0.0"))
+        online = client.ReleaseInfo(mf.validate_manifest(published), "release-asset")
+        checked = client.check_for_update(target=TARGET, info=online)
+        self.assertEqual(checked.latest_version, __version__)
+        self.assertEqual(checked.latest_revision, __release_revision__)
+        self.assertFalse(checked.update_available)
+        self.assertEqual(checked.package_version, "2.0.0.1")
+        original = client.check_for_update(current_version="2.0.0", current_revision=0,
+                                           target=TARGET, info=online)
+        self.assertTrue(original.can_update)
+
+    def test_revision_bridge_prefers_published_asset_over_bare_tag(self):
+        manifest = mf.local_manifest()
+        sources = [("github-api", "api", "github-api"),
+                   ("release-asset", "manifest", "manifest")]
+        api = {"tag_name": "v2.0.0", "assets": []}
+        info = client.fetch_latest(sources=sources, fetcher=lambda url, **_: json.dumps(
+            api if url == "api" else manifest))
+        self.assertEqual(info.source, "release-asset")
+        self.assertEqual(info.package_version, "2.0.0.1")
+
     def test_wrapped_tls_verification_failure_is_reported(self):
         failure = urllib.error.URLError(
             ssl.SSLCertVerificationError(1, "certificate verify failed"))
@@ -605,8 +638,10 @@ class EndToEndUpdateTest(unittest.TestCase):
         cls._fill(cls.package, cls.digest)
 
     @classmethod
-    def _fill(cls, package, digest):
+    def _fill(cls, package, digest, manifest=None):
         data = synthetic_manifest(cls.base)
+        if manifest:
+            data.update(manifest, download_base=cls.base)
         for target in mf.TARGETS:
             data["assets"][target]["sha256"] = ""
             # 各平台共用同一份合成包，保证 intel/arm64 macOS runner 都能下载
@@ -662,6 +697,23 @@ class EndToEndUpdateTest(unittest.TestCase):
             self.assertIn("2.0.0", marker.read_text(encoding="utf-8"))
             self.assertEqual(cfg.read_text(encoding="utf-8"), before)
 
+    def test_replace_same_product_version_uses_build_marker(self):
+        package = synthetic_package_bytes(version="2.0.0.1")
+        self._fill(package, hashlib.sha256(package).hexdigest(), mf.local_manifest())
+        self.addCleanup(self._fill, self.package, self.digest)
+        check = service.check_for_update(current_version="2.0.0", current_revision=0,
+                                         target=TARGET, sources=self._sources())
+        self.assertTrue(check.can_update)
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"JSJ_DATA_DIR": tmp}):
+            progress = []
+            outcome = service.apply_update(check=check, relaunch=False,
+                                           progress=lambda stage, *_: progress.append(stage))
+            self.assertEqual(outcome["latest_version"], "2.0.0")
+            self.assertEqual(outcome["latest_revision"], 1)
+            self.assertIn("2.0.0.1", outcome["installed_to"])
+            for stage in ("download", "verify", "install", "done"):
+                self.assertIn(stage, progress)
+
     def test_checksum_mismatch_aborts_and_keeps_current_version(self):
         corrupted = self.package[:-8] + b"corrupt!!"
         self._fill(corrupted, self.digest)   # 校验和仍指向原始包
@@ -679,7 +731,8 @@ class EndToEndUpdateTest(unittest.TestCase):
             self._fill(self.package, self.digest)
 
     def test_noop_when_already_130(self):
-        result = self._check("2.0.0")
+        result = service.check_for_update(current_version="2.0.0", current_revision=0,
+                                         target=TARGET, sources=self._sources())
         with patch.object(mf, "channel_sources", return_value=self._sources()):
             outcome = service.apply_update(check=result, relaunch=False,
                                            runner=lambda *a, **k: None)
@@ -702,7 +755,7 @@ class EndToEndUpdateTest(unittest.TestCase):
             proc = run_py([sys.executable, str(helper), "--check",
                            "--current-version", old, "--manifest-url", url])
             self.assertEqual(proc.returncode, 0, proc.stderr)
-            self.assertIn("直接升级到 2.0.0", proc.stdout)
+            self.assertIn("直接升级到 2.0.0.1", proc.stdout)
 
     @unittest.skipUnless(sys.platform == "darwin",
                          "合成发布包为 macOS .app 结构")
@@ -789,7 +842,8 @@ class ReleaseConfigTest(unittest.TestCase):
             encoding="utf-8")
         self.assertIn("(2, 0, 0, 0)", version_info)
         self.assertIn("'2.0.0.0'", version_info)
-        self.assertEqual(mf.local_manifest()["latest_version"], "2.0.0")
+        self.assertEqual(mf.local_manifest()["product_version"], "2.0.0")
+        self.assertEqual(mf.local_manifest()["latest_version"], "2.0.0.1")
 
     def test_pyproject_urls_point_to_real_repository(self):
         text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")

@@ -46,7 +46,7 @@ def _ensure_ca_bundle():
 
 
 def _ensure_runtime_version():
-    """让冻结包的界面和更新器读取本次构建的版本标记。"""
+    """读取冻结包的界面版本，首行保留给旧版更新器验证安装包。"""
     if not getattr(sys, "frozen", False):
         return
     candidates = []
@@ -60,10 +60,13 @@ def _ensure_runtime_version():
     ]
     for marker in candidates:
         try:
-            text = marker.read_text(encoding="utf-8").splitlines()[0]
-        except (OSError, UnicodeError, IndexError):
+            lines = marker.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeError):
             continue
-        match = re.search(r"\b(\d+\.\d+\.\d+(?:\.\d+)?)\b", text)
+        if not lines:
+            continue
+        display = next((line for line in lines[1:] if line.startswith("Version: ")), lines[0])
+        match = re.search(r"\b(\d+\.\d+\.\d+(?:\.\d+)?)\b", display)
         if match:
             os.environ["JSJ_RUNTIME_VERSION"] = match.group(1)
             return

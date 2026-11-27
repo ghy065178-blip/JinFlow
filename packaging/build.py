@@ -22,14 +22,24 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tools"))
 
-from jsj_desktop import __version__                      # noqa: E402
+from jsj_desktop import __release_revision__, __version__ # noqa: E402
 from jsj_desktop.data.paths import platform_label        # noqa: E402
+from jsj_desktop.update.version import package_version  # noqa: E402
 import check_no_pii                                      # noqa: E402
 
 APP = "JinshujuDesktop"  # 保留内部可执行文件名，兼容 1.x 更新与数据目录
 PRODUCT_NAME = "JinFlow"
 VALID_TARGETS = {"macos-x86_64", "macos-arm64",
                  "windows-x86_64", "windows-arm64"}
+
+
+def build_version(version):
+    return package_version(version, __release_revision__ if version == __version__ else 0)
+
+
+def write_version_marker(path, version):
+    path.write_text("%s %s\nVersion: %s\n" % (APP, build_version(version), version),
+                    encoding="utf-8")
 
 # 随包说明：macOS 从浏览器下载的 zip 会带 com.apple.quarantine，双击解压目录
 # 里的 .app 会触发 Gatekeeper / App Translocation；若目录位于 iCloud 云盘且
@@ -187,7 +197,7 @@ def build_frozen(target, out_root, version):
     ca_bundle = locate_ca_bundle()
     print("随包 CA 根证书：%s" % ca_bundle)
     version_marker = work / "APP_VERSION.txt"
-    version_marker.write_text("%s %s\n" % (APP, version), encoding="utf-8")
+    write_version_marker(version_marker, version)
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--noconfirm", "--clean", "--onedir", "--windowed",
@@ -218,7 +228,7 @@ def build_frozen(target, out_root, version):
         if icon.exists():
             cmd += ["--icon", str(icon)]
     elif target.startswith("windows"):
-        cmd += ["--version-file", str(make_version_file(work, version))]
+        cmd += ["--version-file", str(make_version_file(work, build_version(version)))]
         icon = ROOT / "packaging" / "icons" / "app.ico"
         if icon.exists():
             cmd += ["--icon", str(icon)]
@@ -233,7 +243,7 @@ def set_macos_bundle_version(app_bundle, version):
     with info.open("rb") as fp:
         data = plistlib.load(fp)
     data["CFBundleShortVersionString"] = str(version)
-    data["CFBundleVersion"] = str(version)
+    data["CFBundleVersion"] = build_version(version)
     data["CFBundleDisplayName"] = PRODUCT_NAME
     data["CFBundleName"] = PRODUCT_NAME
     data["CFBundleIdentifier"] = "cn.jinflow.desktop"
@@ -274,8 +284,7 @@ def stage_and_pack(target, out_root, version, sign_identity):
         # 版本标记写在签名之前，并放在 Contents/Resources（由 CodeResources
         # 封签）。放在 Contents 根目录会被 codesign --verify --deep --strict
         # 判定为「code object is not signed at all」，导致 DMG 校验失败。
-        (dest / "Contents" / "Resources" / "APP_VERSION.txt").write_text(
-            "%s %s\n" % (APP, version), encoding="utf-8")
+        write_version_marker(dest / "Contents" / "Resources" / "APP_VERSION.txt", version)
         if sign_identity:
             sign_macos(dest, sign_identity)
         elif sys.platform == "darwin":
@@ -290,8 +299,7 @@ def stage_and_pack(target, out_root, version, sign_identity):
 
     # 压缩包根目录也放一份版本标记（包外文件，不参与签名），供升级时
     # 在解包后直接核对版本；Windows 版它就位于 JinshujuDesktop/ 目录内。
-    (inner / "APP_VERSION.txt").write_text(
-        "%s %s\n" % (APP, version), encoding="utf-8")
+    write_version_marker(inner / "APP_VERSION.txt", version)
 
     try:
         commit = subprocess.check_output(
@@ -305,11 +313,12 @@ def stage_and_pack(target, out_root, version, sign_identity):
         "python    : %s (%s)\n"
         "built_at  : %s\n"
         "commit    : %s\n"
+        "build     : %s\n"
         "runtime   : Python standard library only (tkinter + urllib)\n"
-        "update    : in-app check + upgrade via help menu; channel v1.3.0\n"
+        "update    : in-app check and manual approval\n"
         "data      : no bundled personal information; user data is created at runtime\n"
         % (APP, version, target, sys.version.split()[0], sys.platform,
-           datetime.now().isoformat(timespec="seconds"), commit))
+           datetime.now().isoformat(timespec="seconds"), commit, build_version(version)))
     (inner / "BUILD_INFO.txt").write_text(build_info, encoding="utf-8")
     shutil.copy2(ROOT / "LICENSE", inner / "LICENSE.txt")
     (inner / "README-RELEASE.txt").write_text(
