@@ -154,15 +154,19 @@ jobs:
         run: |
           $setup = (Resolve-Path "dist/JinFlow-${{ matrix.target }}-Setup.exe").Path
           $install = Join-Path $env:RUNNER_TEMP "JinFlow-${{ matrix.target }}-installed"
-          & $setup /VERYSILENT /SUPPRESSMSGBOXES /NORESTART "/DIR=$install"
-          if ($LASTEXITCODE -ne 0) { throw "setup.exe 安装失败，退出码 $LASTEXITCODE" }
+          $installProc = Start-Process -FilePath $setup -ArgumentList @(
+            "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$install"
+          ) -Wait -PassThru -WindowStyle Hidden
+          if ($installProc.ExitCode -ne 0) { throw "setup.exe 安装失败，退出码 $($installProc.ExitCode)" }
           $exe = Join-Path $install "JinshujuDesktop\JinshujuDesktop.exe"
           if (-not (Test-Path $exe)) { throw "安装后未找到应用程序：$exe" }
           $selfTest = Start-Process -FilePath $exe -ArgumentList "--self-test" -Wait -PassThru -WindowStyle Hidden
           if ($selfTest.ExitCode -ne 0) { throw "安装后的程序自检失败，退出码 $($selfTest.ExitCode)" }
           $uninstaller = Join-Path $install "unins000.exe"
-          & $uninstaller /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
-          if ($LASTEXITCODE -ne 0) { throw "卸载失败，退出码 $LASTEXITCODE" }
+          $uninstallProc = Start-Process -FilePath $uninstaller -ArgumentList @(
+            "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"
+          ) -Wait -PassThru -WindowStyle Hidden
+          if ($uninstallProc.ExitCode -ne 0) { throw "卸载失败，退出码 $($uninstallProc.ExitCode)" }
           if (Test-Path $install) { throw "卸载后安装目录仍存在：$install" }
 
       - name: Upload package
