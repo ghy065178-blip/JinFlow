@@ -505,7 +505,8 @@ class InstallerTest(unittest.TestCase):
             plan = installer.plan_install(fake_ctx(data_dir=tmp), self._package(tmp), "2.0.0")
             first = installer.apply_install(plan, relaunch=False)
             launch_calls = []
-            second = installer.apply_install(plan, runner=lambda args: launch_calls.append(args))
+            second = installer.apply_install(
+                plan, runner=lambda args, **_kwargs: launch_calls.append(args))
             old, new = (Path(result["installed_to"]) for result in (first, second))
             self.assertEqual(new.name, "JinshujuDesktop.app")
             self.assertNotEqual(old, new)
