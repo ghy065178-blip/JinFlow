@@ -33,7 +33,8 @@ class ThemeTest(unittest.TestCase):
         for mode in ("dark", "light"):
             palette = palette_for(mode)
             for key in ("bg", "surface", "surface2", "border", "highlight",
-                        "shadow", "text", "muted", "teal", "green", "red"):
+                        "shadow", "text", "muted", "teal", "green", "red",
+                        "aurora_cyan", "aurora_purple", "aurora_emerald"):
                 self.assertIn(key, palette)
             self.assertEqual(palette["teal"], "#2dd4bf")
             self.assertNotEqual(palette["bg"], palette["surface"])
@@ -101,6 +102,8 @@ class ThemeTest(unittest.TestCase):
                 window.withdraw()
                 self.assertTrue(hasattr(window, "header_theme_buttons"),
                                 "顶栏缺少三态主题控件")
+                self.assertIsNotNone(window._brand_icon)
+                self.assertIn(window._brand_icon.width(), (48, 72, 96))
                 header = dict(window.header_theme_widgets)
                 settings = {button.cget("value"): button for button in
                             window.theme_buttons.winfo_children()}

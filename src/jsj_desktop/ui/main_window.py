@@ -148,8 +148,8 @@ class MainWindow(Tk):
         self.config(menu=menubar)
 
     def _build_header(self):
-        top = ttk.Frame(self, padding=(20, 14, 20, 10))
-        top.pack(fill=X)
+        top = ttk.Frame(self, style="Header.TFrame", padding=(12, 8))
+        top.pack(fill=X, padx=20, pady=(10, 10))
         self.header = top
         ttk.Style(self).configure("Update.Primary.TButton", focuscolor="#042f2e")
         self.update_banner = ttk.Button(self, style="Update.Primary.TButton",
@@ -162,20 +162,25 @@ class MainWindow(Tk):
         self.update_banner.bind("<Return>", activate_banner)
         self._brand_icon = None
         try:
+            scaling = self.winfo_fpixels("1i") / (72 if sys.platform == "darwin" else 96)
+            size = min((48, 72, 96), key=lambda pixels: abs(pixels - 48 * scaling))
+            header_icon = data_paths.resource_path("packaging/icons/app-%d.png" % size)
+            self._brand_icon = tk.PhotoImage(master=self, file=header_icon)
             icon_path = data_paths.resource_path("packaging/icons/app.png")
-            self._brand_icon = tk.PhotoImage(master=self, file=icon_path)
-            ttk.Label(top, image=self._brand_icon).pack(side=LEFT, padx=(0, 10))
+            self.iconphoto(True, tk.PhotoImage(master=self, file=icon_path), self._brand_icon)
+            ttk.Label(top, image=self._brand_icon, style="Header.TLabel").pack(
+                side=LEFT, padx=(0, 10))
         except (OSError, tk.TclError):
             ttk.Label(top, text="JF", style="Brand.TLabel").pack(
                 side=LEFT, padx=(0, 10))
-        brand = ttk.Frame(top)
+        brand = ttk.Frame(top, style="HeaderFill.TFrame")
         brand.pack(side=LEFT)
         ttk.Label(brand, text="JinFlow",
-                  style="Title.TLabel").pack(anchor="w")
+                  style="HeaderTitle.TLabel").pack(anchor="w")
         ttk.Label(brand, text="配置编辑 · 实时终端监控",
-                  style="Muted.TLabel").pack(anchor="w")
+                  style="HeaderMuted.TLabel").pack(anchor="w")
 
-        spacer = ttk.Frame(top)
+        spacer = ttk.Frame(top, style="HeaderFill.TFrame")
         spacer.pack(side=LEFT, fill=X, expand=True)
 
         conn = ttk.Frame(top, style="Pill.TFrame", padding=(10, 6))

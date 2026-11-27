@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """macOS 分发方式回归测试：避免再发布「解压后 .app 打不开」的包。"""
+import struct
 import sys
 import unittest
 from pathlib import Path
@@ -65,6 +66,15 @@ class MacOsDistributionTest(unittest.TestCase):
         self.assertIn('"packaging" / "icons" / "app.icns"', BUILD_PY)
         self.assertIn('"packaging" / "icons" / "app.ico"', BUILD_PY)
         self.assertIn('"packaging" / "icons" / "app.png"', BUILD_PY)
+
+    def test_runtime_logo_has_an_hd_master_and_presized_header_images(self):
+        icons = ROOT / "packaging" / "icons"
+        for name, size in (("app.png", 1024), ("app-48.png", 48),
+                           ("app-72.png", 72), ("app-96.png", 96)):
+            with self.subTest(name=name):
+                data = (icons / name).read_bytes()
+                self.assertEqual(data[:8], b"\x89PNG\r\n\x1a\n")
+                self.assertEqual(struct.unpack(">II", data[16:24]), (size, size))
 
     def test_make_dmg_uses_hdiutil_readonly_image(self):
         import tempfile

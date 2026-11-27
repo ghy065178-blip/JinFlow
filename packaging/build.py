@@ -209,6 +209,9 @@ def build_frozen(target, out_root, version):
         "--add-data", "%s%spackaging/icons" %
         (str(ROOT / "packaging" / "icons" / "app.png"), sep),
     ]
+    for size in (48, 72, 96):
+        icon = ROOT / "packaging" / "icons" / ("app-%d.png" % size)
+        cmd += ["--add-data", "%s%spackaging/icons" % (icon, sep)]
     if target.startswith("macos"):
         cmd += ["--osx-bundle-identifier", "cn.jinshuju.desktop"]
         icon = ROOT / "packaging" / "icons" / "app.icns"

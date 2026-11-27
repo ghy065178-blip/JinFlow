@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """跨平台主题令牌与 tkinter/ttk 样式。
 
-窗体使用蓝灰色的分层表面、圆角、内侧高光和轻薄描边，日志保留独立深色底。
+窗体使用极光色分层表面、圆角和顶部高光，终端保留独立的深色底。
 """
 import base64
 import math
@@ -16,44 +16,44 @@ from tkinter import ttk
 THEME_MODES = ("dark", "light", "system")
 
 _DARK_PALETTE = {
-    "bg": "#0f141c",
-    "ambient": "#283952",
-    "surface": "#131c27",
-    "surface2": "#1e2937",
-    "border": "#344052",
-    "control_border": "#435267",
-    "text": "#eef3fa",
-    "muted": "#aab8ca",
-    "dim": "#95a4b8",
+    "bg": "#080c19",
+    "ambient": "#192839",
+    "surface": "#0e1728",
+    "surface2": "#202844",
+    "border": "#3d4968",
+    "control_border": "#515d7e",
+    "text": "#f3f4fa",
+    "muted": "#b7c1d5",
+    "dim": "#a4b1ca",
     "teal": "#2dd4bf",
     "teal_text": "#7ae4d0",
-    "action": "#54d6c0",
+    "action": "#67e2db",
     "on_action": "#082f30",
-    "selected": "#203e43",
-    "blue": "#58a6ff",
-    "green": "#3fb950",
-    "amber": "#d29922",
-    "red": "#f85149",
-    "purple": "#bc8cff",
-    "log_bg": "#080c12",
+    "selected": "#233c58",
+    "blue": "#79baff",
+    "green": "#65e0af",
+    "amber": "#e7b358",
+    "red": "#ff827d",
+    "purple": "#c9a0ff",
+    "log_bg": "#090f1d",
     "log_text": "#cdd7e4",
     "log_ts": "#94a4bb",
-    "glass": "#18212d",
-    "glass_highlight": "#47576d",
-    "highlight": "#2b3e51",
-    "shadow": "#080c13",
-    "input": "#111923",
-    "notice": "#20303c",
+    "glass": "#1a2339",
+    "glass_highlight": "#8296b1",
+    "highlight": "#303c5a",
+    "shadow": "#060a15",
+    "input": "#10182b",
+    "notice": "#1c3441",
     "warnbox": "#33281a",
 }
 
 _LIGHT_PALETTE = {
-    "bg": "#e8eff7",
-    "ambient": "#d0e0f2",
-    "surface": "#eef4fa",
-    "surface2": "#eaf0f7",
-    "border": "#c6d3e2",
-    "control_border": "#aebdce",
+    "bg": "#e7edf8",
+    "ambient": "#e3ebf7",
+    "surface": "#f1f6fb",
+    "surface2": "#e9effa",
+    "border": "#bbcae0",
+    "control_border": "#a1b0c8",
     "text": "#162535",
     "muted": "#475970",
     "dim": "#566981",
@@ -71,8 +71,8 @@ _LIGHT_PALETTE = {
     "log_text": "#e4edf8",
     "log_ts": "#9faec3",
     "glass": "#f8fbfe",
-    "glass_highlight": "#fcfdff",
-    "highlight": "#dae6f3",
+    "glass_highlight": "#ffffff",
+    "highlight": "#dbe6f8",
     "shadow": "#c1cede",
     "input": "#ffffff",
     "notice": "#e5f1f4",
@@ -80,6 +80,9 @@ _LIGHT_PALETTE = {
 }
 
 _PALETTES = {"dark": _DARK_PALETTE, "light": _LIGHT_PALETTE}
+for _palette in _PALETTES.values():
+    _palette.update(aurora_cyan="#00f2fe", aurora_purple="#a855f7",
+                    aurora_emerald="#34d399")
 PALETTE = dict(_DARK_PALETTE)
 
 LEVEL_COLORS = {
@@ -166,6 +169,11 @@ def _color_mix(start, end, amount):
     return tuple(round(a + (b - a) * amount) for a, b in zip(start, end))
 
 
+def _tint(start, end, amount):
+    color = _color_mix(bytes.fromhex(start[1:]), bytes.fromhex(end[1:]), amount)
+    return "#%02x%02x%02x" % color
+
+
 def _glass_tile(radius, fill, edge, glint):
     """小型 RGBA 圆角底图，ttk 拉伸中间像素，保留半透明边缘。"""
     # ttk 实际会重复中间区域。使用宽一些的中心，避免 Aqua 按像素绘制。
@@ -177,8 +185,8 @@ def _glass_tile(radius, fill, edge, glint):
     for y in range(size):
         rows.append(0)  # PNG 行过滤器
         sheen = max(0, 1 - y / radius)
-        rim = _color_mix(border, shine, sheen)
-        body = _color_mix(face, shine, sheen * 0.20)
+        rim = _color_mix(border, shine, 0.86 if y <= 1 else sheen * 0.36)
+        body = _color_mix(face, shine, sheen * 0.18)
         dy = max(radius - y, 0, y - (radius + center - 1))
         for x in range(size):
             dx = max(radius - x, 0, x - (radius + center - 1))
@@ -207,22 +215,23 @@ def _apply_surfaces(root, style):
     if not hasattr(root, "_surface_images"):
         root._surface_images = {}
 
-    def element(name, radius, normal, states=()):
+    def element(name, radius, normal):
         if name not in root._surface_images:
-            images = [tk.PhotoImage(master=root) for _ in range(1 + len(states))]
-            root._surface_images[name] = images
-            style.element_create(name, "image", images[0], *(
-                (*state, image) for (state, *_), image in zip(states, images[1:])
-            ), width=2 * radius, height=2 * radius, border=radius, padding=1,
+            image = tk.PhotoImage(master=root)
+            root._surface_images[name] = image
+            style.element_create(name, "image", image,
+                                 width=2 * radius, height=2 * radius, border=radius, padding=1,
                                  sticky="nsew")
-        for image, (fill, edge, glint) in zip(root._surface_images[name],
-                                              (normal, *(entry[1:] for entry in states))):
-            image.configure(data=_glass_tile(radius, fill, edge, glint), format="png")
+        root._surface_images[name].configure(data=_glass_tile(radius, *normal), format="png")
 
-    for role, radius in (("Glass", 11), ("Pill", 10), ("Inset", 8)):
+    for role, radius, fill, accent in (
+            ("Header", 16, p["ambient"], p["aurora_cyan"]),
+            ("Glass", 14, p["glass"], p["aurora_purple"]),
+            ("Pill", 10, p["glass"], p["aurora_emerald"]),
+            ("Inset", 8, p["surface"], p["aurora_cyan"])):
         name = role + ".surface"
-        fill = p["surface"] if role == "Inset" else p["glass"]
-        element(name, radius, (fill, p["border"], p["glass_highlight"]))
+        element(name, radius, (fill, _tint(p["border"], accent, 0.13),
+                               _tint(p["glass_highlight"], accent, 0.22)))
         style.layout(role + ".TFrame", [(name, {"sticky": "nsew"})])
 
     element("Brand.face", 10, (p["action"], "#1e759d", "#8ff1df"))
@@ -257,6 +266,7 @@ def apply(root, mode="system", system_mode=None):
                     selectbackground=p["selected"], selectforeground=p["text"],
                     lightcolor=p["control_border"], darkcolor=p["control_border"])
     style.configure("TFrame", background=p["bg"])
+    style.configure("HeaderFill.TFrame", background=p["ambient"])
     style.configure("Card.TFrame", background=p["glass"])
     style.configure("CardHead.TFrame", background=p["surface2"])
     style.configure("Inset.TLabel", background=p["surface"], foreground=p["text"],
@@ -286,6 +296,11 @@ def apply(root, mode="system", system_mode=None):
                     foreground=p["text"], font=(family, 16, "bold"))
     style.configure("Title.TLabel", background=p["bg"], foreground=p["text"],
                     font=(family, 14, "bold"))
+    style.configure("Header.TLabel", background=p["ambient"], foreground=p["text"])
+    style.configure("HeaderTitle.TLabel", background=p["ambient"], foreground=p["text"],
+                    font=(family, 16, "bold"))
+    style.configure("HeaderMuted.TLabel", background=p["ambient"], foreground=p["muted"],
+                    font=(family, 9))
     style.configure("PanelTitle.TLabel", background=p["surface2"],
                     foreground=p["text"], font=(family, 11, "bold"))
     style.configure("PanelTag.TLabel", background=p["surface2"],
@@ -319,12 +334,13 @@ def apply(root, mode="system", system_mode=None):
     style.configure("Primary.TButton", background=p["action"],
                     foreground=p["on_action"], focuscolor=p["on_action"],
                     font=(family, 10, "bold"))
-    style.map("Primary.TButton", background=[("disabled", p["glass"]), ("active", "#74e4d0")])
+    active_action = _tint(p["action"], "#ffffff", 0.19)
+    style.map("Primary.TButton", background=[("disabled", p["glass"]), ("active", active_action)])
     style.configure("Update.Primary.TButton", background=p["action"],
                     foreground=p["on_action"], focuscolor=p["on_action"],
                     font=(family, 10, "bold"))
     style.map("Update.Primary.TButton", background=[("disabled", p["glass"]),
-                                                      ("active", "#74e4d0")])
+                                                      ("active", active_action)])
     style.configure("Danger.TButton", background=p["surface2"],
                     foreground=p["red"], bordercolor="#6e3030")
     style.configure("Sm.TButton", background=p["surface2"],
@@ -368,7 +384,7 @@ def apply(root, mode="system", system_mode=None):
     style.configure("SegmentActive.TButton", background=p["action"],
                     foreground=p["on_action"], bordercolor=p["action"],
                     font=(family, 9, "bold"), padding=(9, 5))
-    style.map("SegmentActive.TButton", background=[("active", "#74e4d0")])
+    style.map("SegmentActive.TButton", background=[("active", active_action)])
 
     style.configure("TEntry", fieldbackground=p["input"], foreground=p["text"],
                     bordercolor=p["control_border"], padding=4, insertcolor=p["text"])
