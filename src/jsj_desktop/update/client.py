@@ -14,7 +14,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from .. import __version__
+from .. import __release_revision__, __version__
 from . import manifest as mf
 from . import version as vmod
 from .errors import (AssetError, ChannelError, ChecksumError,
@@ -34,6 +34,7 @@ class ReleaseInfo:
         self.offline = offline
         self.errors = list(errors or [])
         self.version = data["latest_version"]
+        self.revision = int(data.get("release_revision", 0) or 0)
         self.tag = data.get("tag", "v" + self.version)
         self.notes = data.get("notes", "")
         self.manual_url = data.get("manual_url", mf.RELEASE_PAGE)
@@ -152,15 +153,18 @@ def fetch_latest(sources=None, fetcher=None, timeout=DEFAULT_TIMEOUT):
         return ReleaseInfo(bundled, "bundled", offline=True, errors=errors)
 
     best = max(candidates,
-               key=lambda c: (vmod.version_key(c.version), c.quality()))
+               key=lambda c: (vmod.version_key(c.version), c.revision,
+                              c.quality()))
     best.errors = errors + best.errors
     return best
 
 
-def check_for_update(current_version=None, target=None, info=None,
+def check_for_update(current_version=None, current_revision=None, target=None, info=None,
                      timeout=DEFAULT_TIMEOUT, fetcher=None, sources=None):
     """返回 CheckResult：当前版本、最新版本、是否可升级、资产与失败原因。"""
     current = current_version or __version__
+    current_revision = (__release_revision__ if current_revision is None
+                        else current_revision)
     try:
         info = info or fetch_latest(sources=sources, fetcher=fetcher,
                                     timeout=timeout)
@@ -173,7 +177,9 @@ def check_for_update(current_version=None, target=None, info=None,
         plan = vmod.upgrade_plan(
             current, info.version,
             info.manifest.get("min_supported_version",
-                              vmod.MIN_UPGRADEABLE_VERSION))
+                              vmod.MIN_UPGRADEABLE_VERSION),
+            current_revision=current_revision,
+            latest_revision=info.revision)
         if asset is None and not asset_error:
             try:
                 asset = mf.select_asset(info.manifest, tgt)
@@ -191,6 +197,8 @@ def check_for_update(current_version=None, target=None, info=None,
             reason += "（部分更新通道不可用，已自动切换可用来源）"
         return CheckResult(
             ok=True, current_version=vmod.normalize_version(current),
+            current_revision=plan["current_revision"],
+            latest_revision=plan["latest_revision"],
             latest_version=info.version, tag=info.tag,
             update_available=plan["update_available"],
             supported=plan["supported"], is_legacy=plan["is_legacy"],
@@ -202,6 +210,7 @@ def check_for_update(current_version=None, target=None, info=None,
     except UpdateError as e:
         return CheckResult(
             ok=False, current_version=str(current), latest_version="",
+            current_revision=int(current_revision or 0), latest_revision=0,
             update_available=False, can_update=False, supported=False,
             is_legacy=False, target=str(target or ""), asset=None,
             info=None, notes="", source="", offline=False,

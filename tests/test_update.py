@@ -116,6 +116,20 @@ class VersionCompatibilityTest(unittest.TestCase):
         self.assertFalse(plan["update_available"])
         self.assertIn("已是最新", plan["reason"])
 
+    def test_same_version_higher_release_revision_is_newer(self):
+        plan = vmod.upgrade_plan("2.0.0", "2.0.0", current_revision=0,
+                                 latest_revision=1)
+        self.assertTrue(plan["update_available"])
+        self.assertFalse(plan["is_legacy"])
+        self.assertEqual(plan["current_revision"], 0)
+        self.assertEqual(plan["latest_revision"], 1)
+
+    def test_same_version_same_release_revision_is_current(self):
+        plan = vmod.upgrade_plan("2.0.0", "2.0.0", current_revision=1,
+                                 latest_revision=1)
+        self.assertFalse(plan["update_available"])
+        self.assertIn("最新", plan["reason"])
+
     def test_version_below_floor_cannot_auto_upgrade(self):
         plan = vmod.upgrade_plan("0.9.0", "2.0.0", "1.0.0")
         self.assertFalse(plan["supported"])
@@ -171,6 +185,11 @@ class ManifestTest(unittest.TestCase):
         del data["assets"]["windows-arm64"]
         with self.assertRaises(ManifestError):
             mf.validate_manifest(data)
+
+    def test_manifest_normalizes_release_revision(self):
+        data = mf.validate_manifest(dict(synthetic_manifest(),
+                                         release_revision="3"))
+        self.assertEqual(data["release_revision"], 3)
 
     def test_github_api_release_is_normalized(self):
         payload = {"tag_name": "v2.0.0", "body": "notes",

@@ -2,6 +2,7 @@
   "schema": 1,
   "channel": "JinFlow/stable",
   "latest_version": "2.0.0",
+  "release_revision": 1,
   "tag": "v2.0.0",
   "release_date": "2026-11-27",
   "notes": "2.0.0 统一使用 JinFlow 名称，修复 Mac 全屏焦点与左侧滚动流畅度，统一黑白主题切换，新增 Windows setup.exe 安装与卸载流程；报名业务逻辑、配置格式与本机数据目录保持不变。",

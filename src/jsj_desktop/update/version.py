@@ -79,7 +79,8 @@ def legacy_versions():
     return tuple(LEGACY_VERSIONS)
 
 
-def upgrade_plan(current, latest, min_supported=MIN_UPGRADEABLE_VERSION):
+def upgrade_plan(current, latest, min_supported=MIN_UPGRADEABLE_VERSION,
+                 current_revision=0, latest_revision=0):
     """判定从 current 能否升级到 latest，并给出升级路径与原因。"""
     try:
         cur = normalize_version(current)
@@ -87,11 +88,23 @@ def upgrade_plan(current, latest, min_supported=MIN_UPGRADEABLE_VERSION):
         floor = normalize_version(min_supported)
     except ValueError as e:
         return {"current": str(current), "latest": str(latest),
+                "current_revision": 0, "latest_revision": 0,
                 "update_available": False, "supported": False,
                 "is_legacy": False, "path": "none",
                 "reason": "版本号无法解析：%s" % e}
 
+    try:
+        current_revision = max(0, int(current_revision or 0))
+        latest_revision = max(0, int(latest_revision or 0))
+    except (TypeError, ValueError):
+        return {"current": cur, "latest": new, "min_supported": floor,
+                "current_revision": 0, "latest_revision": 0,
+                "update_available": False, "supported": False,
+                "is_legacy": False, "path": "none",
+                "reason": "发布修订号无法解析。"}
     result = {"current": cur, "latest": new, "min_supported": floor,
+              "current_revision": current_revision,
+              "latest_revision": latest_revision,
               "update_available": False, "supported": True,
               "is_legacy": False, "path": "none", "reason": ""}
     if compare_versions(cur, floor) < 0:
@@ -103,7 +116,15 @@ def upgrade_plan(current, latest, min_supported=MIN_UPGRADEABLE_VERSION):
         result["reason"] = ("当前版本 %s 高于发布通道版本 %s（开发/预览构建），"
                             "无需升级。" % (cur, new))
         return result
-    if compare_versions(cur, new) == 0:
+    comparison = compare_versions(cur, new)
+    if comparison == 0 and latest_revision > current_revision:
+        result["update_available"] = True
+        result["path"] = "direct"
+        result["reason"] = ("发现同版本新发布修订版 %s（当前修订版 %s），可直接升级；"
+                             "本机报名信息与档案不会被修改。"
+                             % (latest_revision, current_revision))
+        return result
+    if comparison == 0:
         result["reason"] = "当前已是最新版本 %s。" % new
         return result
     result["update_available"] = True

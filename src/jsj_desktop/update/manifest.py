@@ -96,6 +96,14 @@ def validate_manifest(data, strict_assets=True):
     except ValueError as e:
         raise ManifestError("更新清单的 upgrade_target 不合法：%s" % e)
 
+    revision_raw = data.get("release_revision", 0)
+    try:
+        release_revision = int(revision_raw)
+    except (TypeError, ValueError):
+        raise ManifestError("更新清单的 release_revision 必须是非负整数。")
+    if release_revision < 0:
+        raise ManifestError("更新清单的 release_revision 必须是非负整数。")
+
     assets = data.get("assets")
     if not isinstance(assets, dict):
         raise ManifestError("更新清单缺少 assets 平台资产表。")
@@ -129,6 +137,7 @@ def validate_manifest(data, strict_assets=True):
         "tag": tag,
         "min_supported_version": min_supported,
         "upgrade_target": latest,
+        "release_revision": release_revision,
         "legacy_versions": list(legacy),
         "notes": str(data.get("notes") or ""),
         "checksums_asset": str(data.get("checksums_asset") or "SHA256SUMS.txt"),
