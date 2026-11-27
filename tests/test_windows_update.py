@@ -83,8 +83,8 @@ class WindowsHandoffTest(unittest.TestCase):
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as pkg:
             app = "JinshujuDesktop/"
             pkg.writestr(app + "JinshujuDesktop.exe", self.exe)
-            pkg.writestr(app + "APP_VERSION.txt", "JinshujuDesktop 2.0.0\n")
-            pkg.writestr(app + "BUILD_INFO.txt", "JinshujuDesktop 2.0.0\n"
+            pkg.writestr(app + "APP_VERSION.txt", "JinshujuDesktop 2.1.0\n")
+            pkg.writestr(app + "BUILD_INFO.txt", "JinshujuDesktop 2.1.0\n
                          "target    : %s\n" % self.target)
             pkg.writestr(app + "flavor.txt", flavor)
             pkg.writestr(app + "_internal/locked.dll", "new runtime")
