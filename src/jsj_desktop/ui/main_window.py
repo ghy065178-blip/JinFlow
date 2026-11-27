@@ -47,6 +47,10 @@ THEME_CHOICES = (("dark", "黑色"), ("system", "跟随系统"), ("light", "白�
 class MainWindow(Tk):
     def __init__(self, data_dir=None, start_task="t1"):
         super().__init__()
+        self._configured_size = None
+        self._window_transition_after = None
+        self._poll_after = None
+        self._toast_after = None
         self.title("JinFlow")
         self.geometry("1360x860")
         self.minsize(1080, 700)
@@ -75,7 +79,6 @@ class MainWindow(Tk):
         self._question_req = None
         self._last_clock = ""
         self._last_theme_probe = 0.0
-        self._toast_after = None
         self._tab_sig = None
         self._task_buttons_map = {}
 
@@ -90,7 +93,11 @@ class MainWindow(Tk):
         self.autoscroll_var.set(bool(saved.get("auto_scroll", True)))
         self.update_var.set(bool(saved.get("check_update_on_startup", True)))
         self.protocol("WM_DELETE_WINDOW", self.close)
-        self.after(80, self._poll)
+        if sys.platform == "win32":
+            self.bind("<Configure>", self._on_window_configure, add="+")
+            self.bind("<F11>", self._toggle_fullscreen)
+            self.bind("<Escape>", self._leave_fullscreen)
+        self._poll_after = self.after(80, self._poll)
         self._init_task(replay=True)
         if self.update_var.get():
             self.after_idle(self._auto_check_update)
@@ -477,7 +484,6 @@ class MainWindow(Tk):
         outer = tk.Frame(self, bg=PALETTE["glass"],
                          highlightbackground=PALETTE["border"],
                          highlightthickness=1)
-        outer.pack(fill=BOTH, expand=True)
         accent = tk.Frame(outer, bg=PALETTE["teal"], width=3)
         accent.pack(side=LEFT, fill=Y)
         label = tk.Label(outer, text="", bg=PALETTE["surface2"],
@@ -485,7 +491,6 @@ class MainWindow(Tk):
                          wraplength=360, justify=LEFT, padx=12, pady=10)
         label.pack(side=LEFT, fill=BOTH, expand=True)
         self.toast_win = outer
-        self.toast_win.place_forget()
         self.toast_accent = accent
         self.toast_label = label
 
@@ -600,9 +605,37 @@ class MainWindow(Tk):
         self.preview_window.lift()
 
     # ==================== 事件循环 ====================
+    def _toggle_fullscreen(self, _event=None):
+        self.attributes("-fullscreen", not self.attributes("-fullscreen"))
+        return "break"
+
+    def _leave_fullscreen(self, _event=None):
+        if self.attributes("-fullscreen"):
+            self.attributes("-fullscreen", False)
+            return "break"
+
+    def _on_window_configure(self, event):
+        size = (event.width, event.height)
+        if event.widget is not self or size == self._configured_size:
+            return
+        self._configured_size = size
+        if self._window_transition_after is not None:
+            self.after_cancel(self._window_transition_after)
+        self._window_transition_after = self.after(100, self._finish_window_transition)
+
+    def _finish_window_transition(self):
+        self._window_transition_after = None
+        self._render_task_tabs()
+        self._tick_countdown()
+        self._render_state()
+
     def _poll(self):
+        self._poll_after = None
+        # Yield to native painting even when a running task keeps the queue busy.
+        deadline = time.monotonic() + 0.008
+        delay = 16
         try:
-            while True:
+            while time.monotonic() < deadline:
                 kind, tid, payload = self.event_queue.get_nowait()
                 if kind == "startup_update":
                     self._show_update_banner(payload)
@@ -610,22 +643,26 @@ class MainWindow(Tk):
                 self.manager.apply_event(kind, tid, payload)
                 self._handle_event(kind, tid, payload)
         except queue.Empty:
-            pass
+            delay = 100
         now = now_beijing()
         clock = now.strftime("%Y-%m-%d %H:%M:%S")
+        transitioning = self._window_transition_after is not None
         if clock != self._last_clock:
             self.clock_var.set(format_beijing_time(now))
             self._last_clock = clock
-            self._render_task_tabs()
-            self._tick_countdown()
-        if (self.theme_mode == "system" and
+            if not transitioning:
+                self._render_task_tabs()
+                if self._tick_countdown():
+                    self._render_state()
+        if (not transitioning and self.theme_mode == "system" and
                 time.monotonic() - self._last_theme_probe >= 2.0):
             self._last_theme_probe = time.monotonic()
             system_mode = detect_system_mode()
             if system_mode != self.system_mode:
                 self.system_mode = system_mode
                 self._apply_theme(persist=False)
-        self.after(100, self._poll)
+        if self.tk.call("winfo", "exists", self._w):
+            self._poll_after = self.after(delay, self._poll)
 
     def _handle_event(self, kind, tid, payload):
         if kind == "question":
@@ -635,14 +672,16 @@ class MainWindow(Tk):
             if tid == self.active_task:
                 self._handle_form_result(payload)
             return
-        if kind in ("tasks", "state", "finished"):
+        transitioning = self._window_transition_after is not None
+        if not transitioning and kind in ("tasks", "state", "finished"):
             self._render_task_tabs()
         if tid != self.active_task:
             return
         if kind == "log":
             self._append_log(payload)
         elif kind == "state":
-            self._render_state()
+            if not transitioning:
+                self._render_state()
         elif kind == "form":
             self.form = dict(payload)
             self._render_form_info()
@@ -650,7 +689,8 @@ class MainWindow(Tk):
         elif kind == "preview":
             self._render_preview(payload)
         elif kind == "finished":
-            self._render_state()
+            if not transitioning:
+                self._render_state()
             self._toast("任务结束：%s（共尝试 %s 次）" %
                         (payload.get("phase", ""), payload.get("attempt", 0)),
                         "ok" if payload.get("success") else "warn")
@@ -668,7 +708,7 @@ class MainWindow(Tk):
                 .replace(tzinfo=CST)
             remain = max(0.0, (dt - datetime.now(CST)).total_seconds())
             t.stats["countdown"] = remain
-            self._render_state()
+            return True
         except ValueError:
             pass
 
@@ -679,7 +719,6 @@ class MainWindow(Tk):
         self.toast_label.configure(text=text)
         self.toast_win.place(relx=1.0, rely=1.0, anchor="se", x=-22, y=-22)
         self.toast_win.tkraise()
-        self.update_idletasks()
         if self._toast_after:
             try:
                 self.after_cancel(self._toast_after)
@@ -778,9 +817,11 @@ class MainWindow(Tk):
         t = self.manager.get(self.active_task)
         running = bool(t and t.running)
         try:
-            self.btn_start.configure(state="disabled" if running else "normal")
-            self.btn_dry.configure(state="disabled" if running else "normal")
-            self.btn_stop.configure(state="normal" if running else "disabled")
+            for button, disabled in ((self.btn_start, running), (self.btn_dry, running),
+                                     (self.btn_stop, not running)):
+                state = "disabled" if disabled else "normal"
+                if str(button.cget("state")) != state:
+                    button.configure(state=state)
         except tk.TclError:
             pass
 
@@ -1622,3 +1663,9 @@ class MainWindow(Tk):
         except Exception:
             pass
         self.destroy()
+
+    def destroy(self):
+        for timer in (self._window_transition_after, self._poll_after, self._toast_after):
+            if timer is not None:
+                self.after_cancel(timer)
+        super().destroy()

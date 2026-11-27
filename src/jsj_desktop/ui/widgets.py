@@ -145,8 +145,10 @@ class ScrollableFrame(ttk.Frame):
 
     def _on_canvas(self, event):
         self._pending_canvas_width = event.width
-        if event.width != self._canvas_width:
-            if self._canvas_width_after is None:
+        if event.width != self._canvas_width and self._canvas_width_after is None:
+            if self._windowing_system == "win32":
+                self._canvas_width_after = self.after(16, self._apply_canvas_width)
+            else:
                 self._canvas_width_after = self.after_idle(
                     self._apply_canvas_width)
 
@@ -182,8 +184,10 @@ class StatusCard(ttk.Frame):
         self._color = PALETTE["text"]
 
     def set(self, value, note=None, color=None):
-        self.value.configure(text=str(value))
-        if note is not None:
+        value = str(value)
+        if self.value.cget("text") != value:
+            self.value.configure(text=value)
+        if note is not None and self.note.cget("text") != note:
             self.note.configure(text=str(note))
         color = color or PALETTE["text"]
         if color != self._color:
