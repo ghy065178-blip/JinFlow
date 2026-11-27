@@ -3,6 +3,11 @@
 产品版本和发布修订由 `src/jsj_desktop/__init__.py`、包元数据及 `update/latest.json`
 共同记录。发布前运行 `tools/check_update_channel.py --offline` 校验标签和安装包版本。
 
+## 2.0.0 修订 3（2026-11-27）
+
+- macOS 的 ZIP、DMG 和暂存更新统一使用 `JinFlow.app`。应用继续读取原有报名信息、档案和设置。
+- 旧版原位升级沿用安装路径。可以在退出后用 Finder 把已有的 `JinshujuDesktop.app` 改名为 `JinFlow.app`。
+
 ## 2.0.0 修订 2（2026-11-27）
 
 相较上一份 `v2.0.0` 发布包，本次涵盖 Apple Silicon、Intel Mac、Windows x86_64 和 Windows ARM64。

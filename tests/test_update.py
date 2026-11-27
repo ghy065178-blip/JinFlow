@@ -495,7 +495,7 @@ class InstallerTest(unittest.TestCase):
                                           self._package(tmp), "2.0.0")
             self.assertEqual(plan["mode"], "staged")
             self.assertIn("updates/2.0.0", plan["target_path"].replace("\\", "/"))
-            self.assertEqual(Path(plan["target_path"]).name, "JinshujuDesktop.app")
+            self.assertEqual(Path(plan["target_path"]).name, "JinFlow.app")
             # platform_label() 返回 macos/windows/linux，不能与 sys.platform 混用
             self.assertTrue(plan["can_auto"])
             self.assertNotIn("没有可直接运行", plan["note"])
@@ -508,7 +508,7 @@ class InstallerTest(unittest.TestCase):
             second = installer.apply_install(
                 plan, runner=lambda args, **_kwargs: launch_calls.append(args))
             old, new = (Path(result["installed_to"]) for result in (first, second))
-            self.assertEqual(new.name, "JinshujuDesktop.app")
+            self.assertEqual(new.name, "JinFlow.app")
             self.assertNotEqual(old, new)
             self.assertTrue(old.is_dir())
             self.assertEqual(launch_calls, [[str(new / "Contents/MacOS/JinshujuDesktop")]])
@@ -825,7 +825,7 @@ class EndToEndUpdateTest(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
             self.assertIn("已切换到 v2.0.0", proc.stdout)
             marker = (Path(tmp) / "data" / "updates" / "2.0.0" /
-                      "JinshujuDesktop.app" / "Contents" / "APP_VERSION.txt")
+                      "JinFlow.app" / "Contents" / "APP_VERSION.txt")
             self.assertTrue(marker.is_file())
             self.assertIn("2.0.0", marker.read_text(encoding="utf-8"))
 

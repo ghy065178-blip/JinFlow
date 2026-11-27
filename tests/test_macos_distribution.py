@@ -39,6 +39,27 @@ class MacOsDistributionTest(unittest.TestCase):
                       BUILD_PY)
         self.assertIn('"codesign", "--verify", "--deep", "--strict"', BUILD_PY)
 
+    def test_stage_uses_product_name_for_macos_bundle(self):
+        import plistlib
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            target = "macos-arm64"
+            contents = out / "raw" / target / "JinshujuDesktop.app" / "Contents"
+            executable = contents / "MacOS" / "JinshujuDesktop"
+            executable.parent.mkdir(parents=True)
+            executable.write_bytes(b"test executable")
+            (contents / "Resources").mkdir()
+            (contents / "Info.plist").write_bytes(plistlib.dumps({
+                "CFBundleExecutable": executable.name,
+            }))
+            with patch.object(packaging_build, "run") as run:
+                packaging_build.stage_and_pack(target, out, "2.0.0", "")
+
+            bundle = out / "stage" / target / "JinFlow.app"
+            self.assertTrue((bundle / "Contents/MacOS/JinshujuDesktop").is_file())
+            self.assertEqual(run.call_args.args[0][-2], str(bundle))
+
     def test_macos_build_passes_release_version_to_pyinstaller(self):
         import plistlib
         import tempfile
@@ -81,7 +102,7 @@ class MacOsDistributionTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "dist"
             stage = out / "stage" / "macos-arm64"
-            (stage / "JinshujuDesktop.app").mkdir(parents=True)
+            (stage / "JinFlow.app").mkdir(parents=True)
             (stage / "README-RELEASE.txt").write_text("ok", encoding="utf-8")
             with patch.object(packaging_build, "run") as run:
                 dmg = packaging_build.make_dmg("macos-arm64", out)

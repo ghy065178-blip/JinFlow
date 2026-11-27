@@ -190,7 +190,7 @@ def verify_package(root, target, version):
         if not app.is_dir():
             apps = sorted(root.glob("*.app"))
             if not apps:
-                raise ValueError("发布包内没有 JinshujuDesktop.app")
+                raise ValueError("发布包内没有 macOS 应用（.app）")
             app = apps[0]
         payload, launch = app, app / "Contents" / "MacOS" / APP
     else:
@@ -283,7 +283,7 @@ def switch(payload, launch, target, version, app_path, no_relaunch):
         print("旧版本已备份：%s" % backup)
         return str(old)
 
-    leaf = (APP + ".app") if target.startswith("macos") else APP
+    leaf = (PACKAGE_NAME + ".app") if target.startswith("macos") else APP
     dest_root = data_root / "updates" / version / leaf
     dest_root.parent.mkdir(parents=True, exist_ok=True)
     if dest_root.exists():

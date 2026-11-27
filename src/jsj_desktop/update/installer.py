@@ -21,7 +21,7 @@ import time
 import zipfile
 from pathlib import Path
 
-from .. import __version__
+from .. import __app_name__, __version__
 from ..data import paths as data_paths
 from . import manifest as mf
 from .errors import InstallError
@@ -86,13 +86,12 @@ def install_context():
 def find_legacy_installations():
     """扫描常见安装位置，供界面提示「检测到旧版本」（只读，不移动任何文件）。"""
     home = Path.home()
-    mac_app = APP + ".app"
     candidates = []
     if sys.platform == "darwin":
-        candidates = [Path("/Applications") / mac_app,
-                      home / "Applications" / mac_app,
-                      home / "Downloads" / mac_app,
-                      home / "Desktop" / mac_app]
+        roots = (Path("/Applications"), home / "Applications",
+                 home / "Downloads", home / "Desktop")
+        candidates = [root / (name + ".app") for root in roots
+                      for name in (__app_name__, APP)]
     elif sys.platform == "win32":
         roots = [os.environ.get("LOCALAPPDATA"), os.environ.get("PROGRAMFILES"),
                  os.environ.get("APPDATA")]
@@ -283,7 +282,7 @@ def plan_install(ctx, package, version):
                     "note": "程序退出后由独立脚本完成替换并自动重启。"}
         mode = "staged"
 
-    leaf = APP + ".app" if ctx["system"] == "macos" else APP
+    leaf = __app_name__ + ".app" if ctx["system"] == "macos" else APP
     dest = updates_root / version / ctx["target"] / leaf
     # 注意：ctx["system"] 来自 platform_label()，取值是 macos/windows/linux，
     # 不是 sys.platform 的 darwin/win32。

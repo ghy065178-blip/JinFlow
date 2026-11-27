@@ -1,19 +1,19 @@
 {
   "schema": 1,
   "channel": "JinFlow/stable",
-  "latest_version": "2.0.0.2",
-  "release_revision": 2,
+  "latest_version": "2.0.0.3",
+  "release_revision": 3,
   "tag": "v2.0.0",
   "release_date": "2026-11-27",
-  "notes": "JinFlow 2.0.0 修订 2。\n更新：液态玻璃风格及高清应用图标。\n新增：可拖拽的左栏分隔线、用户确认后下载安装的顶部更新入口，以及 Windows F11 全屏。\n修复：左栏滚动速度、档案按钮遮挡、Windows 窗口切换的重复重绘和 macOS 暂存启动。",
+  "notes": "JinFlow 2.0.0 修订 3。\nmacOS 安装包中的应用统一命名为 JinFlow.app。已有安装可在退出后于 Finder 改名。\n本版提供液态玻璃风格、高清图标、可调左栏及应用内更新，并优化 Windows 窗口切换。",
   "min_supported_version": "1.0.0",
-  "upgrade_target": "2.0.0.2",
+  "upgrade_target": "2.0.0.3",
   "legacy_versions": ["1.0.0", "1.0.1", "1.0.2", "1.0.3"],
   "legacy_upgrade_paths": {
-    "1.0.0": {"tag": "v1.0.0", "upgrade_to": "2.0.0.2", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"},
-    "1.0.1": {"tag": "v1.0.1", "upgrade_to": "2.0.0.2", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"},
-    "1.0.2": {"tag": "v1.0.2", "upgrade_to": "2.0.0.2", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"},
-    "1.0.3": {"tag": "v1.0.3", "upgrade_to": "2.0.0.2", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"}
+    "1.0.0": {"tag": "v1.0.0", "upgrade_to": "2.0.0.3", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"},
+    "1.0.1": {"tag": "v1.0.1", "upgrade_to": "2.0.0.3", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"},
+    "1.0.2": {"tag": "v1.0.2", "upgrade_to": "2.0.0.3", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"},
+    "1.0.3": {"tag": "v1.0.3", "upgrade_to": "2.0.0.3", "data_compatible": true, "bridge": "JinFlow-Upgrade-Helper.py"}
   },
   "download_base": "https://github.com/ghy065178-blip/JinFlow/releases/download/v2.0.0/",
   "checksums_asset": "SHA256SUMS.txt",

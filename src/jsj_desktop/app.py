@@ -201,7 +201,7 @@ def run_tls_check():
     """诊断 HTTPS 证书链与网络连通性（只读 GET，不会提交任何报名数据）。
 
     macOS 命令行用法：
-        JinshujuDesktop.app/Contents/MacOS/JinshujuDesktop --check-tls
+        JinFlow.app/Contents/MacOS/JinshujuDesktop --check-tls
     """
     import ssl
     import urllib.error

@@ -22,13 +22,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tools"))
 
-from jsj_desktop import __release_revision__, __version__ # noqa: E402
+from jsj_desktop import __app_name__, __release_revision__, __version__ # noqa: E402
 from jsj_desktop.data.paths import platform_label        # noqa: E402
 from jsj_desktop.update.version import package_version  # noqa: E402
 import check_no_pii                                      # noqa: E402
 
 APP = "JinshujuDesktop"  # 保留内部可执行文件名，兼容 1.x 更新与数据目录
-PRODUCT_NAME = "JinFlow"
+PRODUCT_NAME = __app_name__
 VALID_TARGETS = {"macos-x86_64", "macos-arm64",
                  "windows-x86_64", "windows-arm64"}
 
@@ -51,10 +51,10 @@ RELEASE_NOTES_MACOS = """JinFlow · macOS 首次运行必读
 【不要】直接在下载的压缩包、解压出来的文件夹、iCloud 桌面 / 云盘目录里
 双击 JinFlow.app。macOS 会给下载的 app 加上隔离属性并从随机只读
 路径运行；若该目录还在 iCloud 同步中，.app 内部的几百个文件可能尚未下载
-到本地，这两种情况都会出现「应用程序 "JinshujuDesktop.app" 无法打开」。
+到本地，这两种情况都会出现「应用程序 "JinFlow.app" 无法打开」。
 
 正确做法（任选其一）：
-1) 推荐：打开同目录的 .dmg，把 JinshujuDesktop.app 拖到卷内的「应用程序」
+1) 推荐：打开同目录的 .dmg，把 JinFlow.app 拖到卷内的「应用程序」
    图标上（即复制到 /Applications），再从「应用程序」启动。
    DMG 是单个只读映像，不会被云同步拆散，也不需要解压工具还原 .app 内的
    符号链接。
@@ -278,7 +278,7 @@ def stage_and_pack(target, out_root, version, sign_identity):
     stage.mkdir(parents=True, exist_ok=True)
 
     if is_bundle:
-        dest = stage / (APP + ".app")
+        dest = stage / (PRODUCT_NAME + ".app")
         shutil.copytree(source, dest, symlinks=True)
         set_macos_bundle_version(dest, version)
         # 版本标记写在签名之前，并放在 Contents/Resources（由 CodeResources
@@ -330,10 +330,8 @@ def stage_and_pack(target, out_root, version, sign_identity):
         archive.unlink()
     if is_bundle:
         # ditto 保留 .app 内符号链接，普通 zip 会破坏签名与体积
-        # Keep the historical bundle directory for updater compatibility while
-        # publishing the user-facing JinFlow archive name.
         run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent",
-             str(stage / (APP + ".app")), str(archive)])
+             str(dest), str(archive)])
         with zipfile.ZipFile(archive, "a") as zf:
             for extra in ("BUILD_INFO.txt", "LICENSE.txt",
                          "README-RELEASE.txt", "APP_VERSION.txt"):

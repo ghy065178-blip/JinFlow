@@ -138,11 +138,11 @@ Linux   : $XDG_DATA_HOME/jinshuju-desktop/ 或 ~/.local/share/jinshuju-desktop/
 ```json
 {
   "schema": 1,
-  "latest_version": "2.0.0.2",
-  "release_revision": 2,
+  "latest_version": "2.0.0.3",
+  "release_revision": 3,
   "tag": "v2.0.0",
   "min_supported_version": "1.0.0",
-  "upgrade_target": "2.0.0.2",
+  "upgrade_target": "2.0.0.3",
   "legacy_versions": ["1.0.0", "1.0.1", "1.0.2", "1.0.3"],
   "assets": {"macos-arm64": {"zip": "JinFlow-macos-arm64.zip"}},
   "checksums_asset": "SHA256SUMS.txt",
@@ -159,8 +159,8 @@ Linux   : $XDG_DATA_HOME/jinshuju-desktop/ 或 ~/.local/share/jinshuju-desktop/
   `JSJ_UPDATE_MANIFEST_URL`，则只使用该地址作为唯一来源。
 - `tools/check_update_channel.py --offline` 在 CI / Release 校验四处版本号一致、
   四平台资产名、`legacy_upgrade_paths` 与校验和覆盖。
-- 新版本暂存位置为 `<数据目录>/updates/<构建号>/<target>/` 下的应用目录或 `.app`。旧安装备份为
-  `JinshujuDesktop.app.backup-<旧版本>` 或 `JinshujuDesktop.backup-<旧版本>`。
+- 新版本暂存于 `<数据目录>/updates/<构建号>/<target>/` 下。macOS 的暂存应用为 `JinFlow.app`。
+  旧安装备份名会在原应用名后加上 `.backup-<旧版本>`。
   这些目录只含程序文件，不含报名信息。
 
 ## 7. 敏感数据处理

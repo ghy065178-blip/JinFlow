@@ -143,7 +143,7 @@ jobs:
           ZIP="dist/JinFlow-${{ matrix.target }}.zip"
           DMG="dist/JinFlow-${{ matrix.target }}.dmg"
           ditto -x -k "$ZIP" "$T/from-zip"
-          ZAPP="$T/from-zip/JinshujuDesktop.app"
+          ZAPP="$T/from-zip/JinFlow.app"
           test -x "$ZAPP/Contents/MacOS/JinshujuDesktop"
           codesign --verify --deep --strict "$ZAPP"
           xattr -dr com.apple.quarantine "$ZAPP" || true
@@ -151,7 +151,7 @@ jobs:
           MNT="$T/dmg"
           mkdir -p "$MNT"
           hdiutil attach -nobrowse -readonly -mountpoint "$MNT" "$DMG"
-          DAPP="$MNT/JinshujuDesktop.app"
+          DAPP="$MNT/JinFlow.app"
           test -x "$DAPP/Contents/MacOS/JinshujuDesktop"
           codesign --verify --deep --strict "$DAPP"
           "$DAPP/Contents/MacOS/JinshujuDesktop" --check-tls

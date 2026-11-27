@@ -4,8 +4,8 @@
 
 | 发布包 | CPU 架构 | 构建 runner | 官方 Python | 产物 |
 |---|---|---|---|---|
-| `JinFlow-macos-x86_64.dmg` + `.zip` | Intel Mac (x86_64) | `macos-15-intel` / `macos-26-intel` | CPython 3.11+（x86_64） | `JinshujuDesktop.app`（DMG 推荐） |
-| `JinFlow-macos-arm64.dmg` + `.zip` | Apple Silicon (arm64) | `macos-15` / `macos-26` / `macos-latest` | CPython 3.11+（arm64） | `JinshujuDesktop.app`（DMG 推荐） |
+| `JinFlow-macos-x86_64.dmg` + `.zip` | Intel Mac (x86_64) | `macos-15-intel` / `macos-26-intel` | CPython 3.11+（x86_64） | `JinFlow.app`（DMG 推荐） |
+| `JinFlow-macos-arm64.dmg` + `.zip` | Apple Silicon (arm64) | `macos-15` / `macos-26` / `macos-latest` | CPython 3.11+（arm64） | `JinFlow.app`（DMG 推荐） |
 | `JinFlow-windows-x86_64.zip` + `JinFlow-windows-x86_64-Setup.exe` | Windows AMD64 | `windows-2022` / `windows-2025` | CPython 3.11+（amd64） | 支持安装、启动和卸载 |
 | `JinFlow-windows-arm64.zip` + `JinFlow-windows-arm64-Setup.exe` | Windows ARM64 | `windows-11-arm` | CPython 3.11+（arm64，3.11 起提供） | 支持安装、启动和卸载 |
 
@@ -85,14 +85,14 @@ git push origin v1.0.0
 - 开发/自测：
   ```bash
   codesign --force --deep --sign - --entitlements packaging/entitlements.plist \
-           dist/.../JinshujuDesktop.app
+           dist/.../JinFlow.app
   ```
   这属于 **ad-hoc 签名**，能解决部分「已损坏」提示，但 **Gatekeeper 仍会拦截**未公证的包。
 - 正式对外发布（推荐）：
   1. 使用 **Developer ID Application** 证书签名（`--options runtime` 启用 hardened runtime）；
   2. `xcrun notarytool submit <zip> --apple-id ... --team-id ... --password ... --wait` 公证；
-  3. `xcrun stapler staple JinshujuDesktop.app`；
-  4. 用 `ditto` 重新打包并验证 `spctl -a -vvv JinshujuDesktop.app`。
+  3. `xcrun stapler staple JinFlow.app`；
+  4. 用 `ditto` 重新打包并验证 `spctl -a -vvv JinFlow.app`。
 - 需要 Apple Developer 账号；公证凭据通过 GitHub Secrets 注入，切勿写入仓库。
 - 未签名/未公证包需在 Release 说明中提示用户「系统设置 → 隐私与安全性 → 仍要打开」。
 
@@ -138,8 +138,8 @@ git push origin v1.0.0
 
 ## 8. 版本与变更
 
-- 产品版本为 **2.0.0**，发布修订为 **2**。源码、Python 包元数据和标签记录产品版本。
-  冻结包的 `APP_VERSION.txt` 首行与更新清单记录构建号 `2.0.0.2`，供已发布客户端比较和校验。
+- 产品版本为 **2.0.0**，发布修订为 **3**。源码、Python 包元数据和标签记录产品版本。
+  冻结包的 `APP_VERSION.txt` 首行与更新清单记录构建号 `2.0.0.3`，供已发布客户端比较和校验。
   `APP_VERSION.txt` 的 `Version:` 行提供新版界面使用的产品版本。发布前运行 `tools/check_update_channel.py --offline` 校验版本配置。
 - 任何涉及 `core/` 业务逻辑的改动，都必须保证 `tests/test_legacy_parity.py` 与
   `tests/test_mapping.py` 继续通过；1.2.0 只新增 `update/` 与界面附加入口，
@@ -165,5 +165,5 @@ git tag -a v2.0.0 -m "2.0.0 玻璃质感界面与主题控制"
 git push origin v2.0.0
 ```
 
-原 2.0.0 在应用内更新面板识别 `2.0.0.2`，替换后的客户端显示 2.0.0 修订 2。
+原 2.0.0 在应用内更新面板识别 `2.0.0.3`，替换后的客户端显示 2.0.0 修订 3。
 四平台更新回归见 `tests/test_update.py`，Windows 模式验证见 `tests/test_window_transition.py`。
