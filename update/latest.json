@@ -16,7 +16,7 @@
   },
   "download_base": "https://github.com/ghy065178-blip/JinFlow/releases/download/v2.0.0/",
   "checksums_asset": "SHA256SUMS.txt",
-  "manual_url": "https://github.com/ghy065178-blip/jinshuju-registration-desktop/releases/latest",
+  "manual_url": "https://github.com/ghy065178-blip/JinFlow/releases/latest",
   "assets": {
     "macos-x86_64": {
       "zip": "JinFlow-macos-x86_64.zip",
