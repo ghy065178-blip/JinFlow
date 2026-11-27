@@ -237,13 +237,15 @@ class MainWindow(Tk):
     def _build_main(self):
         main = ttk.Frame(self)
         main.pack(fill=BOTH, expand=True, padx=20, pady=(0, 16))
-        main.columnconfigure(0, weight=0, minsize=420)
-        main.columnconfigure(1, weight=1)
-        main.rowconfigure(0, weight=1)
-        self.left_scroll = ScrollableFrame(main)
-        self.left_scroll.grid(row=0, column=0, sticky="nsew", padx=(0, 16))
-        self.term_frame = ttk.Frame(main)
-        self.term_frame.grid(row=0, column=1, sticky="nsew")
+        self.main_pane = tk.PanedWindow(
+            main, orient=tk.HORIZONTAL, borderwidth=0, sashwidth=7,
+            sashrelief="flat", opaqueresize=True, background=PALETTE["border"])
+        self.main_pane.pack(fill=BOTH, expand=True)
+        self.left_scroll = ScrollableFrame(self.main_pane)
+        self.term_frame = ttk.Frame(self.main_pane)
+        self.main_pane.add(self.left_scroll, width=420, minsize=360,
+                           stretch="never")
+        self.main_pane.add(self.term_frame, minsize=390, stretch="always")
         self._build_console()
         self._build_info()
         self._build_logs()
@@ -377,20 +379,28 @@ class MainWindow(Tk):
                  bg=PALETTE["bg"], fg=PALETTE["teal"],
                  font=(font_family(), 9, "bold")).pack(anchor="w", pady=(0, 8))
 
-        row1 = ttk.Frame(prof, style="Card.TFrame")
-        row1.pack(fill=X)
-        self.profile_sel = ttk.Combobox(row1, state="readonly", values=[])
+        profile_select_row = ttk.Frame(prof, style="Card.TFrame")
+        profile_select_row.pack(fill=X)
+        self.profile_sel = ttk.Combobox(profile_select_row, state="readonly", values=[])
         self.profile_sel.pack(side=LEFT, fill=X, expand=True)
         self.profile_sel.bind("<<ComboboxSelected>>", self._on_profile_select)
+
+        profile_button_row = ttk.Frame(prof, style="Card.TFrame")
+        profile_button_row.pack(fill=X, pady=(6, 0))
+        for column in range(4):
+            profile_button_row.columnconfigure(column, weight=1,
+                                                uniform="profile-actions")
         self.profile_btns = {}
-        for key, text, cmd in [
+        for column, (key, text, cmd) in enumerate([
                 ("apply", "应用", self._apply_profile),
                 ("update", "更新", self._update_profile),
                 ("rename", "重命名", self._rename_profile),
-                ("delete", "删除", self._delete_profile)]:
-            b = ttk.Button(row1, text=text, style=("SmDanger.TButton"
-                           if key == "delete" else "Sm.TButton"), command=cmd)
-            b.pack(side=LEFT, padx=(4, 0))
+                ("delete", "删除", self._delete_profile)]):
+            b = ttk.Button(profile_button_row, text=text,
+                           style=("SmDanger.TButton"
+                                  if key == "delete" else "Sm.TButton"),
+                           command=cmd)
+            b.grid(row=0, column=column, sticky="ew", padx=2)
             self.profile_btns[key] = b
 
         row2 = ttk.Frame(prof, style="Card.TFrame")

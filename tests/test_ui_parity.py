@@ -56,6 +56,14 @@ class UiParityTest(unittest.TestCase):
         self.assertNotIn("ttk.Notebook", self.ui,
                           "主界面应为单页面板，不应再使用标签页切换")
 
+    def test_left_panel_is_resizable_and_profile_actions_have_own_row(self):
+        for marker in ("PanedWindow", "sashwidth", "minsize",
+                       "profile_button_row", "profile_select_row"):
+            self.assertIn(marker, self.ui, "缺少可调分栏或档案布局标记：%s" % marker)
+        for marker in ("profile_btns", 'grid(row=0, column=column',
+                       '"delete", "删除"'):
+            self.assertIn(marker, self.ui, "档案按钮未保持可点击网格布局：%s" % marker)
+
     def test_theme_control_and_beijing_clock_remain_in_existing_regions(self):
         for marker in ("theme_mode", "theme_buttons", "clock_var",
                        "apply_theme", "format_beijing_time"):

@@ -29,7 +29,7 @@ class ScrollableFrame(ttk.Frame):
         super().__init__(parent, **kwargs)
         self.canvas = tk.Canvas(self, background=PALETTE["bg"],
                                 highlightthickness=0, borderwidth=0,
-                                yscrollincrement=3)
+                                yscrollincrement=1)
         self.vsb = ttk.Scrollbar(self, orient="vertical",
                                  command=self.canvas.yview)
         self.body = ttk.Frame(self.canvas)
@@ -52,8 +52,15 @@ class ScrollableFrame(ttk.Frame):
         self.bind_class(self._pan_tag, "<ButtonRelease-1>", self._on_pan_end)
         self._pan_active = False
         self._pan_y = 0
+        self._pan_moved = False
+        self._windowing_system = self.tk.call("tk", "windowingsystem")
+        self._wheel_pixels = 0
+        self._wheel_after = None
         self._scrollregion_after = None
+        self._scrollregion = None
         self._canvas_width = None
+        self._canvas_width_after = None
+        self._pending_canvas_width = None
         self.bind_wheel_tree()
 
     @classmethod
@@ -76,6 +83,8 @@ class ScrollableFrame(ttk.Frame):
             self._apply_tags(child)
 
     def _scroll(self, units):
+        if not units:
+            return
         top, bottom = self.canvas.yview()
         if (units < 0 and top <= 0) or (units > 0 and bottom >= 1):
             return
@@ -83,32 +92,37 @@ class ScrollableFrame(ttk.Frame):
 
     def _on_wheel(self, event):
         num = getattr(event, "num", None)
-        if num == 4:                       # Linux 向上
-            self._scroll(-3)
-        elif num == 5:                     # Linux 向下
-            self._scroll(3)
+        if num in (4, 5):
+            pixels = -60 if num == 4 else 60
         else:
-            delta = getattr(event, "delta", 0)
-            if not delta:
-                return "break"
-            # 鼠标滚轮通常 ±120；触控板/精密滚轮是多次小 delta（±1~±40），
-            # 按幅度自适应，避免触控板一次滑动跳过整屏。
-            step = max(1, min(5, int(abs(delta) / 40) or 1))
-            self._scroll(-step if delta > 0 else step)
+            # Aqua 提供小幅原生增量，Windows 的一格滚轮为 120。
+            scale = 8 if self._windowing_system == "aqua" else 0.5
+            pixels = -event.delta * scale
+        if pixels:
+            self._wheel_pixels += pixels
+            if self._wheel_after is None:
+                self._wheel_after = self.after(8, self._flush_wheel)
         return "break"
+
+    def _flush_wheel(self):
+        self._wheel_after = None
+        pixels = int(self._wheel_pixels)
+        self._wheel_pixels -= pixels
+        self._scroll(pixels)
 
     def _on_pan_start(self, event):
         self._pan_active = True
         self._pan_y = event.y_root
+        self._pan_moved = False
 
     def _on_pan_move(self, event):
         if not self._pan_active:
             return
         dy = event.y_root - self._pan_y
-        if abs(dy) < 3:
+        if not self._pan_moved and abs(dy) < 3:
             return
-        units = -int(dy / 6) or (-1 if dy > 0 else 1)
-        self._scroll(units)
+        self._pan_moved = True
+        self._scroll(-dy)
         self._pan_y = event.y_root
         return "break"
 
@@ -124,14 +138,33 @@ class ScrollableFrame(ttk.Frame):
 
     def _apply_scrollregion(self):
         self._scrollregion_after = None
-        bbox = self.canvas.bbox("all")
-        if bbox:
-            self.canvas.configure(scrollregion=bbox)
+        region = self.canvas.bbox(self._win)
+        if region and region != self._scrollregion:
+            self._scrollregion = region
+            self.canvas.configure(scrollregion=region)
 
     def _on_canvas(self, event):
+        self._pending_canvas_width = event.width
         if event.width != self._canvas_width:
-            self._canvas_width = event.width
-            self.canvas.itemconfig(self._win, width=event.width)
+            if self._canvas_width_after is None:
+                self._canvas_width_after = self.after_idle(
+                    self._apply_canvas_width)
+
+    def _apply_canvas_width(self):
+        self._canvas_width_after = None
+        width = self._pending_canvas_width
+        self._pending_canvas_width = None
+        if width is None or width == self._canvas_width:
+            return
+        self._canvas_width = width
+        self.canvas.itemconfig(self._win, width=width)
+
+    def destroy(self):
+        for timer in (self._wheel_after, self._scrollregion_after,
+                      self._canvas_width_after):
+            if timer is not None:
+                self.after_cancel(timer)
+        super().destroy()
 
     def clear(self):
         for child in self.body.winfo_children():
