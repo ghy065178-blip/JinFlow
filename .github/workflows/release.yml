@@ -148,6 +148,23 @@ jobs:
           Get-Item "dist/JinFlow-${{ matrix.target }}-Setup.exe" | Select-Object FullName, Length
           Get-ChildItem "dist/JinFlow-*.zip" | Select-Object Name, Length
 
+      - name: Verify Windows setup install and uninstall
+        if: startsWith(matrix.target, 'windows')
+        shell: pwsh
+        run: |
+          $setup = (Resolve-Path "dist/JinFlow-${{ matrix.target }}-Setup.exe").Path
+          $install = Join-Path $env:RUNNER_TEMP "JinFlow-${{ matrix.target }}-installed"
+          & $setup /VERYSILENT /SUPPRESSMSGBOXES /NORESTART "/DIR=$install"
+          if ($LASTEXITCODE -ne 0) { throw "setup.exe 安装失败，退出码 $LASTEXITCODE" }
+          $exe = Join-Path $install "JinshujuDesktop\JinshujuDesktop.exe"
+          if (-not (Test-Path $exe)) { throw "安装后未找到应用程序：$exe" }
+          $selfTest = Start-Process -FilePath $exe -ArgumentList "--self-test" -Wait -PassThru -WindowStyle Hidden
+          if ($selfTest.ExitCode -ne 0) { throw "安装后的程序自检失败，退出码 $($selfTest.ExitCode)" }
+          $uninstaller = Join-Path $install "unins000.exe"
+          & $uninstaller /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+          if ($LASTEXITCODE -ne 0) { throw "卸载失败，退出码 $LASTEXITCODE" }
+          if (Test-Path $install) { throw "卸载后安装目录仍存在：$install" }
+
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
